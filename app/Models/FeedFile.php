@@ -73,6 +73,28 @@ class FeedFile extends Model
     }
 
     /**
+     * Column names discovered from the last successful feed load.
+     *
+     * @return list<string>
+     */
+    public function availableHeaders(): array
+    {
+        $headers = $this->snapshot?->headers ?? [];
+        if (! is_array($headers)) {
+            return [];
+        }
+
+        $headers = array_values(array_filter(
+            array_map(static fn ($h) => trim((string) $h), $headers),
+            static fn (string $h) => $h !== '',
+        ));
+
+        natcasesort($headers);
+
+        return array_values($headers);
+    }
+
+    /**
      * @param  list<string>|null  $headers
      */
     public function resolveSkuColumn(?array $headers = null): string

@@ -54,5 +54,6 @@ Route::middleware('auth')->group(function () {
         Route::post('price-columns', [PriceColumnController::class, 'store'])->name('price-columns.store');
         Route::put('price-columns/{priceColumn}', [PriceColumnController::class, 'update'])->name('price-columns.update');
         Route::delete('price-columns/{priceColumn}', [PriceColumnController::class, 'destroy'])->name('price-columns.destroy');
+        Route::post('price-columns/{feed}/refresh-headers', [PriceColumnController::class, 'refreshHeaders'])->name('price-columns.refresh-headers');
     });
 });

@@ -38,9 +38,12 @@ class FeedController extends Controller
 
     public function edit(FeedFile $feed): View
     {
+        $feed->load('snapshot');
+
         return view('admin.feeds.edit', [
             'feed' => $feed,
             'sourceTypes' => FeedSourceType::cases(),
+            'availableHeaders' => $feed->availableHeaders(),
         ]);
     }
 

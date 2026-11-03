@@ -29,11 +29,20 @@
 <label>Délimiteur (`\t` pour tabulation)</label>
 <input name="delimiter" value="{{ old('delimiter', $f?->delimiter === "\t" ? '\t' : ($f?->delimiter ?? '\t')) }}" required>
 
+@php($headers = $availableHeaders ?? ($f?->availableHeaders() ?? []))
 <label>Colonne SKU</label>
-<input name="sku_column" value="{{ old('sku_column', $f?->sku_column ?? 'Identifiant_unique') }}" required>
+<x-csv-column-select
+    name="sku_column"
+    :headers="$headers"
+    :value="old('sku_column', $f?->sku_column ?? 'Identifiant_unique')"
+/>
 
 <label>Colonne nom produit</label>
-<input name="name_column" value="{{ old('name_column', $f?->name_column ?? 'Titre') }}" required>
+<x-csv-column-select
+    name="name_column"
+    :headers="$headers"
+    :value="old('name_column', $f?->name_column ?? 'Titre')"
+/>
 
 <h3>SFTP (surcharge optionnelle — sinon .env)</h3>
 @php($cfg = $f?->connection_config ?? [])
