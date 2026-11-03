@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Currency;
 use App\Models\FeedFile;
 use App\Models\PriceColumn;
 use App\Services\Feed\FeedSnapshotService;
@@ -24,7 +25,9 @@ class PriceColumnController extends Controller
             'selectedFeedId' => $feedId,
             'selectedFeed' => $selectedFeed,
             'availableHeaders' => $selectedFeed?->availableHeaders() ?? [],
+            'currencies' => Currency::query()->active()->orderBy('sort_order')->orderBy('code')->get(),
             'columns' => PriceColumn::query()
+                ->with('currency')
                 ->when($feedId, fn ($q) => $q->where('feed_file_id', $feedId))
                 ->orderBy('name')
                 ->get(),
@@ -81,7 +84,7 @@ class PriceColumnController extends Controller
     }
 
     /**
-     * @return array{name: string, csv_column: string, alias: ?string}
+     * @return array{name: string, csv_column: string, alias: ?string, currency_id: int}
      */
     private function validated(Request $request, FeedFile $feed): array
     {
@@ -96,6 +99,7 @@ class PriceColumnController extends Controller
                 Rule::when($headers !== [], Rule::in($headers)),
             ],
             'alias' => ['nullable', 'string', 'max:255'],
+            'currency_id' => ['required', 'exists:currencies,id'],
         ]);
     }
 }

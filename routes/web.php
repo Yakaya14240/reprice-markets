@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\FeedController as AdminFeedController;
 use App\Http\Controllers\Admin\MarketplaceController;
 use App\Http\Controllers\Admin\PriceColumnController;
@@ -50,6 +51,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('users', UserController::class)->except(['show', 'destroy']);
         Route::resource('feeds', AdminFeedController::class)->except(['show', 'destroy']);
         Route::post('feeds/{feed}/test', [AdminFeedController::class, 'test'])->name('feeds.test');
+        Route::resource('currencies', CurrencyController::class)->except(['show', 'destroy']);
         Route::get('price-columns', [PriceColumnController::class, 'index'])->name('price-columns.index');
         Route::post('price-columns', [PriceColumnController::class, 'store'])->name('price-columns.store');
         Route::put('price-columns/{priceColumn}', [PriceColumnController::class, 'update'])->name('price-columns.update');

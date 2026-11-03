@@ -71,6 +71,7 @@
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
             <a href="{{ route('admin.feeds.index') }}" class="{{ request()->routeIs('admin.feeds.*') ? 'active' : '' }}">Flux</a>
             <a href="{{ route('admin.price-columns.index') }}" class="{{ request()->routeIs('admin.price-columns.*') ? 'active' : '' }}">Mapping prix</a>
+            <a href="{{ route('admin.currencies.index') }}" class="{{ request()->routeIs('admin.currencies.*') ? 'active' : '' }}">Devises</a>
             <a href="{{ route('admin.marketplaces.index') }}" class="{{ request()->routeIs('admin.marketplaces.*') ? 'active' : '' }}">Marketplaces</a>
             <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">Utilisateurs</a>
             <a href="{{ route('prices.index') }}">↩ Retour app</a>

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\FeedSourceType;
 use App\Enums\MarketplaceDriver;
 use App\Models\ChannelPriceMapping;
+use App\Models\Currency;
 use App\Models\FeedFile;
 use App\Models\Marketplace;
 use App\Models\MarketplaceShopPrice;
@@ -29,14 +30,18 @@ class MarketplaceSeeder extends Seeder
             ],
         );
 
+        $eurId = Currency::query()->where('code', 'EUR')->value('id');
+        $plnId = Currency::query()->where('code', 'PLN')->value('id');
+
         $columns = [
-            ['name' => 'Prix France', 'csv_column' => 'Prix_TTC', 'alias' => 'FR'],
-            ['name' => 'Prix Italie', 'csv_column' => 'Prix_TTC_Italie', 'alias' => 'IT'],
-            ['name' => 'Prix Espagne', 'csv_column' => 'Prix_TTC_Espagne', 'alias' => 'ES'],
-            ['name' => 'Prix Allemagne', 'csv_column' => 'Prix_TTC_Allemand', 'alias' => 'DE'],
-            ['name' => 'Prix Pays-Bas', 'csv_column' => 'Prix_TTC_NL', 'alias' => 'NL'],
-            ['name' => 'Prix Portugal', 'csv_column' => 'Prix_TTC_Portugal', 'alias' => 'PT'],
-            ['name' => 'Prix BUT', 'csv_column' => 'Prix_BUT', 'alias' => 'BUT'],
+            ['name' => 'Prix France', 'csv_column' => 'Prix_TTC', 'alias' => 'FR', 'currency_id' => $eurId],
+            ['name' => 'Prix Italie', 'csv_column' => 'Prix_TTC_Italie', 'alias' => 'IT', 'currency_id' => $eurId],
+            ['name' => 'Prix Espagne', 'csv_column' => 'Prix_TTC_Espagne', 'alias' => 'ES', 'currency_id' => $eurId],
+            ['name' => 'Prix Allemagne', 'csv_column' => 'Prix_TTC_Allemand', 'alias' => 'DE', 'currency_id' => $eurId],
+            ['name' => 'Prix Pays-Bas', 'csv_column' => 'Prix_TTC_NL', 'alias' => 'NL', 'currency_id' => $eurId],
+            ['name' => 'Prix Portugal', 'csv_column' => 'Prix_TTC_Portugal', 'alias' => 'PT', 'currency_id' => $eurId],
+            ['name' => 'Prix Pologne', 'csv_column' => 'Prix_TTC_Pologne', 'alias' => 'PL', 'currency_id' => $plnId],
+            ['name' => 'Prix BUT', 'csv_column' => 'Prix_BUT', 'alias' => 'BUT', 'currency_id' => $eurId],
         ];
 
         $priceColumns = [];
@@ -49,6 +54,7 @@ class MarketplaceSeeder extends Seeder
                 [
                     'name' => $column['name'],
                     'alias' => $column['alias'],
+                    'currency_id' => $column['currency_id'],
                     'is_active' => true,
                 ],
             );

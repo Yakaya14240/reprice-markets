@@ -86,7 +86,11 @@ class ProductController extends Controller
         $sku = $feed->productSku($product, $headers);
         $nameCol = $feed->resolveNameColumn($headers);
 
-        $priceColumns = $feed->priceColumns()->where('is_active', true)->orderBy('name')->get();
+        $priceColumns = $feed->priceColumns()
+            ->with('currency')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
         $pending = PendingPriceChange::query()
             ->where('user_id', $request->user()->id)
             ->where('feed_file_id', $feed->id)
@@ -103,6 +107,8 @@ class ProductController extends Controller
                 'name' => $column->name,
                 'csv_column' => $column->csv_column,
                 'alias' => $column->alias,
+                'currency_code' => $column->currency?->code,
+                'currency_symbol' => $column->currency?->symbol,
                 'current_price' => $current,
                 'pending_price' => $pendingChange?->new_price,
             ];

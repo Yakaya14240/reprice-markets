@@ -270,9 +270,10 @@
                 const row = document.createElement('div');
                 row.className = 'price-row';
                 const value = price.pending_price ?? price.current_price ?? '';
+                const currency = [price.currency_code, price.currency_symbol].filter(Boolean).join(' ');
                 row.innerHTML = `
-                    <div><strong>${escapeHtml(price.name)}</strong><div class="muted">${escapeHtml(price.csv_column)}</div></div>
-                    <div class="muted">Actuel: ${escapeHtml(price.current_price ?? '')}</div>
+                    <div><strong>${escapeHtml(price.name)}</strong><div class="muted">${escapeHtml(price.csv_column)}${currency ? ' · ' + escapeHtml(currency) : ''}</div></div>
+                    <div class="muted">Actuel: ${escapeHtml(price.current_price ?? '')}${price.currency_symbol ? ' ' + escapeHtml(price.currency_symbol) : ''}</div>
                     <input type="number" step="0.01" min="0.01" value="${escapeHtml(value)}" data-column="${escapeHtml(price.csv_column)}">
                     <button class="btn ghost" type="button">OK</button>
                 `;
