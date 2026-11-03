@@ -48,7 +48,7 @@ class PricesWorkflowTest extends TestCase
         app(FeedSnapshotService::class)->refresh($feed);
 
         $this->actingAs($user)
-            ->postJson(route('api.products.prices', [$feed, 'ABC1']), [
+            ->postJson(route('api.products.prices', [$feed, 0]), [
                 'csv_column' => 'Prix_TTC',
                 'new_price' => 12.5,
             ])

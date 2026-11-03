@@ -71,4 +71,68 @@ class FeedFile extends Model
     {
         return $this->write_location ?: (string) $this->location;
     }
+
+    /**
+     * @param  list<string>|null  $headers
+     */
+    public function resolveSkuColumn(?array $headers = null): string
+    {
+        $configured = trim((string) $this->sku_column);
+        $headers = $headers ?? $this->snapshot?->headers;
+
+        if ($configured !== '' && (is_null($headers) || in_array($configured, $headers, true))) {
+            return $configured;
+        }
+
+        foreach (['Identifiant_unique', 'SKU', 'sku', 'offer-sku', 'ID'] as $candidate) {
+            if (is_array($headers) && in_array($candidate, $headers, true)) {
+                return $candidate;
+            }
+        }
+
+        return $configured !== '' ? $configured : 'Identifiant_unique';
+    }
+
+    /**
+     * @param  list<string>|null  $headers
+     */
+    public function resolveNameColumn(?array $headers = null): string
+    {
+        $configured = trim((string) $this->name_column);
+        $headers = $headers ?? $this->snapshot?->headers;
+
+        if ($configured !== '' && (is_null($headers) || in_array($configured, $headers, true))) {
+            return $configured;
+        }
+
+        foreach (['Titre', 'Title', 'title', 'name', 'Nom'] as $candidate) {
+            if (is_array($headers) && in_array($candidate, $headers, true)) {
+                return $candidate;
+            }
+        }
+
+        return $configured !== '' ? $configured : 'Titre';
+    }
+
+    /**
+     * @param  array<string, string|null>  $product
+     * @param  list<string>|null  $headers
+     */
+    public function productSku(array $product, ?array $headers = null): string
+    {
+        $column = $this->resolveSkuColumn($headers);
+        $sku = trim((string) ($product[$column] ?? ''));
+        if ($sku !== '') {
+            return $sku;
+        }
+
+        foreach (['Identifiant_unique', 'SKU', 'sku', 'EAN', 'ean'] as $candidate) {
+            $value = trim((string) ($product[$candidate] ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
 }

@@ -28,33 +28,43 @@ class ProductController extends Controller
         }
 
         $data = $this->snapshots->loadProducts($feed);
-        $skuCol = $feed->sku_column;
-        $nameCol = $feed->name_column;
+        $headers = $data['headers'];
+        $skuCol = $feed->resolveSkuColumn($headers);
+        $nameCol = $feed->resolveNameColumn($headers);
         $q = mb_strtolower(trim((string) $request->query('q', '')));
         $offset = max(0, $request->integer('offset'));
         $limit = min(100, max(1, $request->integer('limit', 40)));
 
         $filtered = collect($data['products'])
-            ->filter(function (array $product) use ($q, $skuCol, $nameCol) {
+            ->values()
+            ->map(function (array $product, int $index) use ($feed, $headers, $nameCol) {
+                return [
+                    'id' => $index,
+                    'sku' => $feed->productSku($product, $headers),
+                    'name' => (string) ($product[$nameCol] ?? ''),
+                    '_product' => $product,
+                ];
+            })
+            ->filter(function (array $row) use ($q) {
                 if ($q === '') {
                     return true;
                 }
-                $sku = mb_strtolower((string) ($product[$skuCol] ?? ''));
-                $name = mb_strtolower((string) ($product[$nameCol] ?? ''));
 
-                return str_contains($sku, $q) || str_contains($name, $q);
+                return str_contains(mb_strtolower($row['sku']), $q)
+                    || str_contains(mb_strtolower($row['name']), $q);
             })
             ->values();
 
-        $slice = $filtered->slice($offset, $limit)->values()->map(function (array $product) use ($skuCol, $nameCol) {
-            return [
-                'sku' => (string) ($product[$skuCol] ?? ''),
-                'name' => (string) ($product[$nameCol] ?? ''),
-            ];
-        });
+        $slice = $filtered->slice($offset, $limit)->values()->map(fn (array $row) => [
+            'id' => $row['id'],
+            'sku' => $row['sku'],
+            'name' => $row['name'],
+        ]);
 
         return response()->json([
             'status' => 'ready',
+            'sku_column' => $skuCol,
+            'name_column' => $nameCol,
             'total' => $filtered->count(),
             'offset' => $offset,
             'limit' => $limit,
@@ -63,17 +73,18 @@ class ProductController extends Controller
         ]);
     }
 
-    public function show(Request $request, FeedFile $feed, string $sku): JsonResponse
+    public function show(Request $request, FeedFile $feed, int $row): JsonResponse
     {
         $data = $this->snapshots->loadProducts($feed);
-        $skuCol = $feed->sku_column;
-        $product = collect($data['products'])->first(
-            fn (array $row) => (string) ($row[$skuCol] ?? '') === $sku
-        );
+        $product = $data['products'][$row] ?? null;
 
-        if (! $product) {
+        if (! is_array($product)) {
             return response()->json(['message' => 'Produit introuvable.'], 404);
         }
+
+        $headers = $data['headers'];
+        $sku = $feed->productSku($product, $headers);
+        $nameCol = $feed->resolveNameColumn($headers);
 
         $priceColumns = $feed->priceColumns()->where('is_active', true)->orderBy('name')->get();
         $pending = PendingPriceChange::query()
@@ -113,14 +124,15 @@ class ProductController extends Controller
             ]);
 
         return response()->json([
+            'id' => $row,
             'sku' => $sku,
-            'name' => (string) ($product[$feed->name_column] ?? ''),
+            'name' => (string) ($product[$nameCol] ?? ''),
             'prices' => $prices,
             'history' => $history,
         ]);
     }
 
-    public function updatePrice(Request $request, FeedFile $feed, string $sku): JsonResponse
+    public function updatePrice(Request $request, FeedFile $feed, int $row): JsonResponse
     {
         $data = $request->validate([
             'csv_column' => ['required', 'string', 'max:255'],
@@ -136,11 +148,17 @@ class ProductController extends Controller
             return response()->json(['message' => 'Colonne prix invalide.'], 422);
         }
 
-        $products = $this->snapshots->loadProducts($feed)['products'];
-        $skuCol = $feed->sku_column;
-        $product = collect($products)->first(fn (array $row) => (string) ($row[$skuCol] ?? '') === $sku);
-        if (! $product) {
+        $loaded = $this->snapshots->loadProducts($feed);
+        $product = $loaded['products'][$row] ?? null;
+        if (! is_array($product)) {
             return response()->json(['message' => 'Produit introuvable.'], 404);
+        }
+
+        $sku = $feed->productSku($product, $loaded['headers']);
+        if ($sku === '') {
+            return response()->json([
+                'message' => 'Impossible de déterminer le SKU du produit. Vérifiez la colonne SKU du flux en admin (ex. Identifiant_unique).',
+            ], 422);
         }
 
         $old = $product[$data['csv_column']] ?? null;
@@ -172,7 +190,6 @@ class ProductController extends Controller
     public function refresh(FeedFile $feed): JsonResponse
     {
         try {
-            // Call the service directly so remote errors bubble to the UI.
             $snapshot = $this->snapshots->refresh($feed);
         } catch (\Throwable $e) {
             $snapshot = $feed->snapshot()->first();

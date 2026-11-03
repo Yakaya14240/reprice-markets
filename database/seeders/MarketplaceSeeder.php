@@ -23,7 +23,7 @@ class MarketplaceSeeder extends Seeder
                 'write_source_type' => FeedSourceType::Sftp,
                 'write_location' => '/test_clement/Flux_Lengow_Sun_CDISCOUNT.csv',
                 'delimiter' => "\t",
-                'sku_column' => 'SKU',
+                'sku_column' => 'Identifiant_unique',
                 'name_column' => 'Titre',
                 'is_active' => true,
             ],

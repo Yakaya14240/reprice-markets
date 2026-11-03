@@ -34,8 +34,8 @@ Route::middleware('auth')->group(function () {
             Route::get('/status', [ProductController::class, 'status'])->name('api.feeds.status');
             Route::post('/refresh', [ProductController::class, 'refresh'])->name('api.feeds.refresh');
             Route::get('/products', [ProductController::class, 'index'])->name('api.products.index');
-            Route::get('/products/{sku}', [ProductController::class, 'show'])->name('api.products.show');
-            Route::post('/products/{sku}/prices', [ProductController::class, 'updatePrice'])->name('api.products.prices');
+            Route::get('/products/{row}', [ProductController::class, 'show'])->whereNumber('row')->name('api.products.show');
+            Route::post('/products/{row}/prices', [ProductController::class, 'updatePrice'])->whereNumber('row')->name('api.products.prices');
             Route::get('/pending', [PublishController::class, 'pending'])->name('api.pending.index');
             Route::delete('/pending/{pending}', [PublishController::class, 'destroyPending'])->name('api.pending.destroy');
             Route::post('/publish', [PublishController::class, 'store'])->name('api.publish.store');

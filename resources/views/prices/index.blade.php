@@ -113,8 +113,8 @@
         status: @json(route('api.feeds.status', $feed)),
         refresh: @json(route('api.feeds.refresh', $feed)),
         products: @json(route('api.products.index', $feed)),
-        product: (sku) => @json(route('api.products.show', [$feed, '__SKU__'])).replace('__SKU__', encodeURIComponent(sku)),
-        price: (sku) => @json(route('api.products.prices', [$feed, '__SKU__'])).replace('__SKU__', encodeURIComponent(sku)),
+        product: (rowId) => @json(route('api.products.show', [$feed, 0])).replace(/\/0$/, '/' + encodeURIComponent(rowId)),
+        price: (rowId) => @json(route('api.products.prices', [$feed, 0])).replace(/\/0\/prices$/, '/' + encodeURIComponent(rowId) + '/prices'),
         pending: @json(route('api.pending.index', $feed)),
         publish: @json(route('api.publish.store', $feed)),
         publishStatus: @json(route('api.publish.status')),
@@ -134,7 +134,7 @@
     let offset = 0;
     let loadingList = false;
     let hasMore = true;
-    let activeSku = null;
+    let activeRowId = null;
     let searchTimer = null;
 
     const api = (url, options = {}) => fetch(url, {
@@ -195,10 +195,14 @@
         products.forEach(p => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'product-row' + (p.sku === activeSku ? ' active' : '');
-            btn.dataset.sku = p.sku;
-            btn.innerHTML = `<div class="sku">${escapeHtml(p.sku)}</div><div class="muted">${escapeHtml(p.name || '')}</div>`;
-            btn.addEventListener('click', () => openProduct(p.sku));
+            btn.className = 'product-row' + (String(p.id) === String(activeRowId) ? ' active' : '');
+            btn.dataset.rowId = String(p.id);
+            btn.innerHTML = `<div class="sku">${escapeHtml(p.sku || ('#' + p.id))}</div><div class="muted">${escapeHtml(p.name || '')}</div>`;
+            btn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openProduct(p.id);
+            });
             listEl.appendChild(btn);
         });
     }
@@ -231,16 +235,16 @@
         await loadMore(true);
     }
 
-    async function openProduct(sku) {
-        activeSku = sku;
+    async function openProduct(rowId) {
+        activeRowId = rowId;
         [...listEl.querySelectorAll('.product-row')].forEach(el => {
-            el.classList.toggle('active', el.dataset.sku === sku);
+            el.classList.toggle('active', el.dataset.rowId === String(rowId));
         });
         detailEl.innerHTML = '<div class="muted">Chargement…</div>';
         try {
-            const data = await api(endpoints.product(sku));
+            const data = await api(endpoints.product(rowId));
             detailEl.innerHTML = `
-                <h2 style="margin-top:0;">${escapeHtml(data.sku)}</h2>
+                <h2 style="margin-top:0;">${escapeHtml(data.sku || ('#' + data.id))}</h2>
                 <p class="muted">${escapeHtml(data.name || '')}</p>
                 <div class="price-grid" id="price-grid"></div>
                 <h3>Historique</h3>
@@ -275,7 +279,7 @@
                 row.querySelector('button').addEventListener('click', async () => {
                     const input = row.querySelector('input');
                     try {
-                        await api(endpoints.price(sku), {
+                        await api(endpoints.price(rowId), {
                             method: 'POST',
                             body: JSON.stringify({ csv_column: price.csv_column, new_price: input.value }),
                         });
@@ -335,7 +339,7 @@
             const status = await api(endpoints.publishStatus);
             setUiLock(true, status.label || 'Terminé', status.progress || 100);
             await refreshPending();
-            if (activeSku) await openProduct(activeSku);
+            if (activeRowId !== null) await openProduct(activeRowId);
             setTimeout(() => setUiLock(false), 600);
         } catch (e) {
             setUiLock(true, e.message, 100);

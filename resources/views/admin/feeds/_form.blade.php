@@ -30,7 +30,7 @@
 <input name="delimiter" value="{{ old('delimiter', $f?->delimiter === "\t" ? '\t' : ($f?->delimiter ?? '\t')) }}" required>
 
 <label>Colonne SKU</label>
-<input name="sku_column" value="{{ old('sku_column', $f?->sku_column ?? 'SKU') }}" required>
+<input name="sku_column" value="{{ old('sku_column', $f?->sku_column ?? 'Identifiant_unique') }}" required>
 
 <label>Colonne nom produit</label>
 <input name="name_column" value="{{ old('name_column', $f?->name_column ?? 'Titre') }}" required>
