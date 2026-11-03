@@ -1,19 +1,19 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard')
+@section('title', 'Suivi')
 
 @section('content')
-    <h1>Dashboard</h1>
-    <p class="muted">Bonjour {{ auth()->user()->name }} ({{ auth()->user()->role->label() }})</p>
+    <h1>Suivi</h1>
+    <p class="muted">Historique récent des modifications et publications.</p>
 
-    <div class="grid">
-        <div class="card"><div class="muted">Marketplaces actives</div><div class="stat">{{ $marketplacesCount }}</div></div>
-        <div class="card"><div class="muted">Flux actifs</div><div class="stat">{{ $feedsCount }}</div></div>
+    <div class="grid" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+        <div class="card"><div class="muted">Marketplaces actives</div><div style="font-size:1.75rem;font-weight:700;">{{ $marketplacesCount }}</div></div>
+        <div class="card"><div class="muted">Flux actifs</div><div style="font-size:1.75rem;font-weight:700;">{{ $feedsCount }}</div></div>
     </div>
 
     <div class="card">
-        <h2>Dernières modifications de prix</h2>
-        <table>
+        <h2>Dernières modifications publiées</h2>
+        <table style="width:100%;border-collapse:collapse;">
             <thead><tr><th>Quand</th><th>Opérateur</th><th>SKU</th><th>Colonne</th><th>Nouveau</th></tr></thead>
             <tbody>
             @forelse ($recentChanges as $change)
@@ -25,7 +25,7 @@
                     <td>{{ $change->new_price }}</td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="muted">Aucune modification pour le moment.</td></tr>
+                <tr><td colspan="5" class="muted">Aucune modification publiée.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -33,8 +33,8 @@
 
     <div class="card">
         <h2>Derniers push</h2>
-        <table>
-            <thead><tr><th>Quand</th><th>Marketplace</th><th>Statut</th><th>Opérateur</th></tr></thead>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr><th>Quand</th><th>Marketplace</th><th>Statut</th><th>Opérateur</th><th>Message</th></tr></thead>
             <tbody>
             @forelse ($recentPushes as $batch)
                 <tr>
@@ -42,9 +42,10 @@
                     <td>{{ $batch->marketplace?->name }}</td>
                     <td>{{ $batch->status->value }}</td>
                     <td>{{ $batch->user?->name }}</td>
+                    <td>{{ $batch->result_message }}</td>
                 </tr>
             @empty
-                <tr><td colspan="4" class="muted">Aucun push pour le moment.</td></tr>
+                <tr><td colspan="5" class="muted">Aucun push.</td></tr>
             @endforelse
             </tbody>
         </table>

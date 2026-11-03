@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\RefreshFeedJob;
+use App\Models\FeedFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +39,14 @@ class LoginController extends Controller
             return back()->withErrors(['email' => 'Compte désactivé.']);
         }
 
-        return redirect()->intended(route('dashboard'));
+        FeedFile::query()
+            ->where('is_active', true)
+            ->pluck('id')
+            ->each(fn (int $id) => RefreshFeedJob::dispatch($id));
+
+        return redirect()
+            ->intended(route('prices.index'))
+            ->with('boot_refresh', true);
     }
 
     public function destroy(Request $request): RedirectResponse

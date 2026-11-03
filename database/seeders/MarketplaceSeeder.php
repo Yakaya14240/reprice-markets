@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\FeedSourceType;
 use App\Enums\MarketplaceDriver;
 use App\Models\ChannelPriceMapping;
 use App\Models\FeedFile;
@@ -10,19 +11,20 @@ use App\Models\MarketplaceShopPrice;
 use App\Models\PriceColumn;
 use Illuminate\Database\Seeder;
 
-/**
- * Seeds non-secret reference data extracted from the legacy tool.
- * API keys / SFTP passwords must be provided via admin UI or .env — never committed.
- */
 class MarketplaceSeeder extends Seeder
 {
     public function run(): void
     {
         $feed = FeedFile::query()->updateOrCreate(
-            ['remote_path' => '/test_clement/Flux_Lengow_Sun_CDISCOUNT.csv'],
+            ['name' => 'Flux Lengow Sun Cdiscount'],
             [
-                'name' => 'Flux Lengow Sun Cdiscount',
+                'source_type' => FeedSourceType::Sftp,
+                'location' => '/test_clement/Flux_Lengow_Sun_CDISCOUNT.csv',
+                'write_source_type' => FeedSourceType::Sftp,
+                'write_location' => '/test_clement/Flux_Lengow_Sun_CDISCOUNT.csv',
                 'delimiter' => "\t",
+                'sku_column' => 'SKU',
+                'name_column' => 'Titre',
                 'is_active' => true,
             ],
         );
@@ -104,17 +106,7 @@ class MarketplaceSeeder extends Seeder
             ],
         );
 
-        // Leroy Merlin multi-country channel → price column mapping
-        $lmChannels = [
-            'FR' => 'FR',
-            'IT' => 'IT',
-            'ES' => 'ES',
-            'DE' => 'DE',
-            'NL' => 'NL',
-            'PT' => 'PT',
-        ];
-
-        foreach ($lmChannels as $channelCode => $alias) {
+        foreach (['FR', 'IT', 'ES', 'DE', 'NL', 'PT'] as $channelCode) {
             ChannelPriceMapping::query()->updateOrCreate(
                 [
                     'marketplace_id' => $leroymerlin->id,
@@ -122,34 +114,21 @@ class MarketplaceSeeder extends Seeder
                 ],
                 [
                     'channel_name' => $channelCode,
-                    'price_column_id' => $priceColumns[$alias]->id,
+                    'price_column_id' => $priceColumns[$channelCode]->id,
                 ],
             );
         }
 
-        // Bricodepot shops ES / PT
         MarketplaceShopPrice::query()->updateOrCreate(
-            [
-                'marketplace_id' => $bricodepot->id,
-                'shop_id' => '2102',
-            ],
+            ['marketplace_id' => $bricodepot->id, 'shop_id' => '2102'],
             ['price_column_id' => $priceColumns['ES']->id],
         );
-
         MarketplaceShopPrice::query()->updateOrCreate(
-            [
-                'marketplace_id' => $bricodepot->id,
-                'shop_id' => '2227',
-            ],
+            ['marketplace_id' => $bricodepot->id, 'shop_id' => '2227'],
             ['price_column_id' => $priceColumns['PT']->id],
         );
-
-        // Default Leclerc → FR price
         MarketplaceShopPrice::query()->updateOrCreate(
-            [
-                'marketplace_id' => $leclerc->id,
-                'shop_id' => '2861',
-            ],
+            ['marketplace_id' => $leclerc->id, 'shop_id' => '2861'],
             ['price_column_id' => $priceColumns['FR']->id],
         );
     }
