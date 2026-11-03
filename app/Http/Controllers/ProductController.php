@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\FeedSnapshotStatus;
-use App\Jobs\RefreshFeedJob;
 use App\Models\FeedFile;
 use App\Models\PendingPriceChange;
 use App\Models\PriceChangeLog;
@@ -172,15 +171,28 @@ class ProductController extends Controller
 
     public function refresh(FeedFile $feed): JsonResponse
     {
-        RefreshFeedJob::dispatchSync($feed->id);
-        $snapshot = $feed->snapshot()->first();
+        try {
+            // Call the service directly so remote errors bubble to the UI.
+            $snapshot = $this->snapshots->refresh($feed);
+        } catch (\Throwable $e) {
+            $snapshot = $feed->snapshot()->first();
+
+            return response()->json([
+                'status' => $snapshot?->status?->value ?? 'failed',
+                'progress' => $snapshot?->progress ?? 100,
+                'label' => $snapshot?->progress_label ?? 'Échec du chargement',
+                'products_count' => $snapshot?->products_count ?? 0,
+                'error' => $snapshot?->error_message ?: $e->getMessage(),
+                'message' => $snapshot?->error_message ?: $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
-            'status' => $snapshot?->status?->value,
-            'progress' => $snapshot?->progress,
-            'label' => $snapshot?->progress_label,
-            'products_count' => $snapshot?->products_count,
-            'error' => $snapshot?->error_message,
+            'status' => $snapshot->status->value,
+            'progress' => $snapshot->progress,
+            'label' => $snapshot->progress_label,
+            'products_count' => $snapshot->products_count,
+            'error' => $snapshot->error_message,
         ]);
     }
 

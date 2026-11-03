@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\FeedSourceType;
 use App\Http\Controllers\Controller;
 use App\Models\FeedFile;
+use App\Services\Feed\FeedIO;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -48,6 +50,13 @@ class FeedController extends Controller
         $feed->update($data);
 
         return redirect()->route('admin.feeds.index')->with('status', 'Flux mis à jour.');
+    }
+
+    public function test(FeedFile $feed, FeedIO $feedIO): JsonResponse
+    {
+        $result = $feedIO->probe($feed);
+
+        return response()->json($result, $result['ok'] ? 200 : 422);
     }
 
     /**

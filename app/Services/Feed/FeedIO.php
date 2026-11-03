@@ -51,6 +51,29 @@ final class FeedIO
         };
     }
 
+    /**
+     * Lightweight connectivity check used by admin "Tester".
+     *
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    public function probe(FeedFile $feed): array
+    {
+        try {
+            return match ($feed->source_type) {
+                FeedSourceType::Url => $this->probeUrl((string) $feed->location),
+                FeedSourceType::Local => $this->probeLocal((string) $feed->location),
+                FeedSourceType::Sftp => $this->probeSftp($feed, (string) $feed->location),
+            };
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'status' => null,
+                'bytes' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
     private function readLocal(string $path): string
     {
         if (! is_file($path)) {
@@ -79,12 +102,121 @@ final class FeedIO
 
     private function readUrl(string $url): string
     {
-        $response = Http::timeout(120)->get($url);
-        if (! $response->successful()) {
-            throw new RuntimeException("Unable to download feed URL (HTTP {$response->status()}).");
+        $url = trim($url);
+        if (! filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new RuntimeException("Invalid feed URL: {$url}");
         }
 
-        return $response->body();
+        $tmp = tempnam(sys_get_temp_dir(), 'feedurl_');
+        if ($tmp === false) {
+            throw new RuntimeException('Unable to create temporary file for URL download.');
+        }
+
+        try {
+            $response = Http::timeout(180)
+                ->withHeaders($this->browserHeaders())
+                ->withOptions([
+                    'allow_redirects' => true,
+                    'sink' => $tmp,
+                    'http_errors' => false,
+                ])
+                ->get($url);
+
+            $status = $response->status();
+            $bytes = is_file($tmp) ? filesize($tmp) : 0;
+
+            if ($status < 200 || $status >= 300) {
+                $snippet = is_file($tmp) ? substr((string) file_get_contents($tmp), 0, 200) : '';
+                throw new RuntimeException(
+                    "Remote feed URL returned HTTP {$status} for [{$url}]"
+                    .($snippet !== '' ? " — body: {$snippet}" : '')
+                );
+            }
+
+            if ($bytes === 0 || $bytes === false) {
+                throw new RuntimeException("Remote feed URL returned an empty body for [{$url}]");
+            }
+
+            $content = file_get_contents($tmp);
+            if ($content === false) {
+                throw new RuntimeException("Unable to read downloaded feed for [{$url}]");
+            }
+
+            return $content;
+        } finally {
+            if (is_file($tmp)) {
+                @unlink($tmp);
+            }
+        }
+    }
+
+    /**
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    private function probeUrl(string $url): array
+    {
+        $url = trim($url);
+        $response = Http::timeout(60)
+            ->withHeaders($this->browserHeaders())
+            ->withOptions(['allow_redirects' => true, 'http_errors' => false])
+            ->head($url);
+
+        // Some CDNs disallow HEAD — fallback to ranged GET.
+        if ($response->status() === 405 || $response->status() === 403 || $response->status() === 404) {
+            $response = Http::timeout(60)
+                ->withHeaders($this->browserHeaders() + ['Range' => 'bytes=0-1023'])
+                ->withOptions(['allow_redirects' => true, 'http_errors' => false])
+                ->get($url);
+        }
+
+        $status = $response->status();
+        $ok = $status >= 200 && $status < 300;
+        $bytes = (int) ($response->header('Content-Length') ?: strlen($response->body()));
+
+        return [
+            'ok' => $ok,
+            'status' => $status,
+            'bytes' => $bytes,
+            'message' => $ok
+                ? "OK — HTTP {$status}, {$bytes} octets"
+                : "Échec — HTTP {$status} pour [{$url}]",
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    private function probeLocal(string $path): array
+    {
+        if (! is_file($path)) {
+            return ['ok' => false, 'status' => null, 'bytes' => null, 'message' => "Fichier introuvable: {$path}"];
+        }
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'bytes' => filesize($path) ?: 0,
+            'message' => 'OK — fichier local accessible',
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    private function probeSftp(FeedFile $feed, string $remotePath): array
+    {
+        $sftp = $this->connectSftp($feed);
+        $stat = $sftp->stat($remotePath);
+        if ($stat === false) {
+            return ['ok' => false, 'status' => null, 'bytes' => null, 'message' => "Chemin SFTP introuvable: {$remotePath}"];
+        }
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'bytes' => (int) ($stat['size'] ?? 0),
+            'message' => 'OK — fichier SFTP accessible',
+        ];
     }
 
     private function readSftp(FeedFile $feed, string $remotePath): string
@@ -124,6 +256,17 @@ final class FeedIO
         }
 
         return $sftp;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function browserHeaders(): array
+    {
+        return [
+            'User-Agent' => 'Mozilla/5.0 (compatible; reprice-markets/1.0; +internal)',
+            'Accept' => 'text/csv,text/plain,*/*',
+        ];
     }
 
     /**

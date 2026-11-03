@@ -49,6 +49,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('marketplaces', MarketplaceController::class)->except(['show', 'destroy']);
         Route::resource('users', UserController::class)->except(['show', 'destroy']);
         Route::resource('feeds', AdminFeedController::class)->except(['show', 'destroy']);
+        Route::post('feeds/{feed}/test', [AdminFeedController::class, 'test'])->name('feeds.test');
         Route::get('price-columns', [PriceColumnController::class, 'index'])->name('price-columns.index');
         Route::post('price-columns', [PriceColumnController::class, 'store'])->name('price-columns.store');
         Route::put('price-columns/{priceColumn}', [PriceColumnController::class, 'update'])->name('price-columns.update');

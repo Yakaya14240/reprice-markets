@@ -21,7 +21,16 @@
                     <td><code>{{ $feed->effectiveWriteLocation() }}</code></td>
                     <td>{{ $feed->price_columns_count }}</td>
                     <td>{{ $feed->is_active ? 'oui' : 'non' }}</td>
-                    <td><a href="{{ route('admin.feeds.edit', $feed) }}">Éditer</a></td>
+                    <td class="actions">
+                        <a href="{{ route('admin.feeds.edit', $feed) }}">Éditer</a>
+                        <button
+                            class="btn secondary"
+                            type="button"
+                            data-test-feed
+                            data-url="{{ route('admin.feeds.test', $feed) }}"
+                        >Tester</button>
+                        <span class="muted" data-test-result></span>
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="muted">Aucun flux.</td></tr>
@@ -30,3 +39,35 @@
         </table>
     </div>
 @endsection
+
+@push('scripts')
+<script>
+(() => {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    document.querySelectorAll('[data-test-feed]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const resultEl = btn.parentElement.querySelector('[data-test-result]');
+            resultEl.textContent = 'test…';
+            btn.disabled = true;
+            try {
+                const res = await fetch(btn.dataset.url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                    },
+                });
+                const data = await res.json();
+                resultEl.textContent = data.message || (res.ok ? 'OK' : 'Échec');
+                resultEl.style.color = data.ok ? '#86efac' : '#fca5a5';
+            } catch (e) {
+                resultEl.textContent = e.message;
+                resultEl.style.color = '#fca5a5';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+})();
+</script>
+@endpush

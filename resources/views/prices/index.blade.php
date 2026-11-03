@@ -109,6 +109,17 @@
     const feedId = {{ $feed->id }};
     const csrf = document.querySelector('meta[name="csrf-token"]').content;
     const bootRefresh = @json($bootRefresh);
+    const endpoints = {
+        status: @json(route('api.feeds.status', $feed)),
+        refresh: @json(route('api.feeds.refresh', $feed)),
+        products: @json(route('api.products.index', $feed)),
+        product: (sku) => @json(route('api.products.show', [$feed, '__SKU__'])).replace('__SKU__', encodeURIComponent(sku)),
+        price: (sku) => @json(route('api.products.prices', [$feed, '__SKU__'])).replace('__SKU__', encodeURIComponent(sku)),
+        pending: @json(route('api.pending.index', $feed)),
+        publish: @json(route('api.publish.store', $feed)),
+        publishStatus: @json(route('api.publish.status')),
+    };
+
     const listEl = document.getElementById('product-list');
     const metaEl = document.getElementById('list-meta');
     const detailEl = document.getElementById('detail-card');
@@ -135,7 +146,9 @@
         ...options,
     }).then(async r => {
         const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.message || ('HTTP ' + r.status));
+        if (!r.ok) {
+            throw new Error(data.message || data.error || `Erreur application HTTP ${r.status} (${url})`);
+        }
         return data;
     });
 
@@ -145,16 +158,17 @@
     }
 
     async function pollFeedStatus() {
-        const data = await api(`/api/feeds/${feedId}/status`);
+        const data = await api(endpoints.status);
         setLoadProgress(data.progress || 0, data.label || data.status);
         return data;
     }
 
     async function refreshFeed() {
-        setLoadProgress(5, 'Rafraîchissement…');
+        setLoadProgress(5, 'Téléchargement du flux distant…');
         document.getElementById('btn-refresh').disabled = true;
         try {
-            await api(`/api/feeds/${feedId}/refresh`, { method: 'POST', body: '{}' });
+            const result = await api(endpoints.refresh, { method: 'POST', body: '{}' });
+            setLoadProgress(result.progress || 100, result.label || 'Flux chargé');
             await resetAndLoad();
         } catch (e) {
             setLoadProgress(100, e.message);
@@ -196,7 +210,7 @@
         loadingList = true;
         const q = document.getElementById('search').value.trim();
         try {
-            const data = await api(`/api/feeds/${feedId}/products?offset=${offset}&limit=40&q=${encodeURIComponent(q)}`);
+            const data = await api(`${endpoints.products}?offset=${offset}&limit=40&q=${encodeURIComponent(q)}`);
             if (data.status !== 'ready') {
                 metaEl.textContent = data.label || 'Chargement du flux…';
                 return;
@@ -224,7 +238,7 @@
         });
         detailEl.innerHTML = '<div class="muted">Chargement…</div>';
         try {
-            const data = await api(`/api/feeds/${feedId}/products/${encodeURIComponent(sku)}`);
+            const data = await api(endpoints.product(sku));
             detailEl.innerHTML = `
                 <h2 style="margin-top:0;">${escapeHtml(data.sku)}</h2>
                 <p class="muted">${escapeHtml(data.name || '')}</p>
@@ -261,7 +275,7 @@
                 row.querySelector('button').addEventListener('click', async () => {
                     const input = row.querySelector('input');
                     try {
-                        await api(`/api/feeds/${feedId}/products/${encodeURIComponent(sku)}/prices`, {
+                        await api(endpoints.price(sku), {
                             method: 'POST',
                             body: JSON.stringify({ csv_column: price.csv_column, new_price: input.value }),
                         });
@@ -278,7 +292,7 @@
     }
 
     async function refreshPending() {
-        const data = await api(`/api/feeds/${feedId}/pending`);
+        const data = await api(endpoints.pending);
         const items = data.pending || [];
         pendingCount.textContent = items.length;
         if (!items.length) {
@@ -314,11 +328,11 @@
         }
         setUiLock(true, 'Démarrage…', 2);
         try {
-            await api(`/api/feeds/${feedId}/publish`, {
+            await api(endpoints.publish, {
                 method: 'POST',
                 body: JSON.stringify({ marketplace_ids: marketplaceIds }),
             });
-            const status = await api('/api/publish/status');
+            const status = await api(endpoints.publishStatus);
             setUiLock(true, status.label || 'Terminé', status.progress || 100);
             await refreshPending();
             if (activeSku) await openProduct(activeSku);

@@ -21,6 +21,12 @@ final class FeedSnapshotService
 
     public function refresh(FeedFile $feed): FeedSnapshot
     {
+        // Large Lengow feeds can exceed default memory while building the snapshot.
+        if (function_exists('ini_set')) {
+            @ini_set('memory_limit', '1024M');
+            @ini_set('max_execution_time', '300');
+        }
+
         $snapshot = $this->ensureSnapshot($feed);
         $snapshot->update([
             'status' => FeedSnapshotStatus::Loading,
