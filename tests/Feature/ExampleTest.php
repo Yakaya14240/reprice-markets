@@ -20,8 +20,8 @@ class ExampleTest extends TestCase
         $this->get(route('login'))
             ->assertOk()
             ->assertSee('Connexion', false)
-            ->assertSee('Agri', false)
-            ->assertSee('gator', false)
+            ->assertSee('agrigator-logo.png', false)
+            ->assertSee('favicon.svg', false)
             ->assertSee('Se connecter', false)
             ->assertSee('name="email"', false)
             ->assertSee('name="password"', false);

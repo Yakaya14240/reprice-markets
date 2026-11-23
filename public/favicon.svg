@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Agrigator">
+  <!-- Chunky alligator head, optimized for 16–32px -->
+  <rect width="64" height="64" rx="14" fill="#ffffff"/>
+  <!-- Head + body block -->
+  <path fill="#3DAE67" d="
+    M6 34
+    C6 24 14 17 24 16
+    C28 16 31 17 34 20
+    L38 16 L41 21 L45 15 L48 21 L52 17
+    C56 20 58 26 57 32
+    C56 40 50 46 42 47
+    L20 47
+    C12 47 6 41 6 34
+    Z"/>
+  <!-- Smile / jaw cut -->
+  <path fill="#ffffff" d="M10 35 C16 39 24 39 30 36 L30 38 C23 41 15 41 10 37 Z"/>
+  <!-- Eye -->
+  <circle cx="20" cy="28" r="4.2" fill="#ffffff"/>
+  <circle cx="20.6" cy="28.4" r="2.1" fill="#111111"/>
+  <!-- Nostril -->
+  <circle cx="9.5" cy="30.5" r="1.2" fill="#2f9a58"/>
+</svg>

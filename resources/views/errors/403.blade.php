@@ -4,6 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Accès refusé — Agrigator</title>
+    @php($faviconVersion = @filemtime(public_path('favicon.svg')) ?: time())
+    <link rel="icon" href="{{ asset('favicon.svg') }}?v={{ $faviconVersion }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-32x32.png') }}?v={{ $faviconVersion }}" type="image/png" sizes="32x32">
+    <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v={{ $faviconVersion }}">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}?v={{ $faviconVersion }}">
     <style>
         :root {
             --bg: #f4f6f8;

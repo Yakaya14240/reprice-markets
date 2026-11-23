@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Agrigator')</title>
+    @php($faviconVersion = @filemtime(public_path('favicon.svg')) ?: time())
+    <link rel="icon" href="{{ asset('favicon.svg') }}?v={{ $faviconVersion }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-32x32.png') }}?v={{ $faviconVersion }}" type="image/png" sizes="32x32">
+    <link rel="icon" href="{{ asset('favicon-16x16.png') }}?v={{ $faviconVersion }}" type="image/png" sizes="16x16">
+    <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v={{ $faviconVersion }}">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}?v={{ $faviconVersion }}">
     <style>
         :root {
             --bg: #f4f6f8;
@@ -17,7 +23,7 @@
             --danger: #9b1c1c;
             --warn: #8a6d3b;
             --brand-agri: #111111;
-            --brand-gator: #0f6e56;
+            --brand-gator: #3DAE67;
         }
         * { box-sizing: border-box; }
         body {
@@ -32,9 +38,14 @@
             display: flex; justify-content: space-between; align-items: center;
             gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
         }
+        .brand { display: inline-flex; align-items: center; gap: .55rem; line-height: 1; }
+        .brand-logo { display: block; height: 42px; width: auto; max-width: min(220px, 55vw); object-fit: contain; }
+        .brand-logo-sm { height: 34px; }
+        .brand-logo-lg { height: 72px; max-width: min(320px, 80vw); }
+        .brand-mark { display: block; height: 28px; width: auto; object-fit: contain; }
         .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--brand-agri); letter-spacing: .01em; }
         .brand-name .brand-gator { color: var(--brand-gator); }
-        .brand-name .brand-suffix { color: var(--muted); font-weight: 700; font-size: .9em; }
+        .brand-suffix { color: var(--muted); font-weight: 700; font-size: .9em; }
         nav { display: flex; gap: .85rem; flex-wrap: wrap; align-items: center; }
         nav a { color: var(--muted); font-weight: 600; }
         nav a:hover, nav a.active { color: var(--accent); }

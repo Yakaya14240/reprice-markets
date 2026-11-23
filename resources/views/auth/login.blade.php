@@ -17,11 +17,7 @@
         margin: 0;
         padding: 1.5rem 1.5rem 1.35rem;
     }
-    .login-card .brand-name {
-        display: inline-block;
-        font-size: 1.45rem;
-        margin: 0 0 .35rem;
-    }
+    .login-card .brand { margin: 0 0 .35rem; }
     .login-card h1 {
         margin: 1.1rem 0 .25rem;
         font-size: 1.5rem;
@@ -48,7 +44,7 @@
 @section('content')
     <div class="login-shell">
         <div class="card login-card">
-            <x-brand />
+            <x-brand size="lg" />
             <h1>Connexion</h1>
             <p class="muted">Espace opérateurs multi-marketplace</p>
 

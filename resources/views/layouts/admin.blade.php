@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Admin — Agrigator')</title>
+    @php($faviconVersion = @filemtime(public_path('favicon.svg')) ?: time())
+    <link rel="icon" href="{{ asset('favicon.svg') }}?v={{ $faviconVersion }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon-32x32.png') }}?v={{ $faviconVersion }}" type="image/png" sizes="32x32">
+    <link rel="icon" href="{{ asset('favicon-16x16.png') }}?v={{ $faviconVersion }}" type="image/png" sizes="16x16">
+    <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v={{ $faviconVersion }}">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}?v={{ $faviconVersion }}">
     <style>
         :root {
             --bg: #111827;
@@ -15,7 +21,7 @@
             --accent: #38bdf8;
             --border: #374151;
             --brand-agri: #f3f4f6;
-            --brand-gator: #22c55e;
+            --brand-gator: #3DAE67;
         }
         * { box-sizing: border-box; }
         body {
@@ -32,9 +38,11 @@
             gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
             border-bottom: 1px solid var(--border); padding-bottom: .9rem;
         }
+        .brand { display: inline-flex; align-items: center; gap: .55rem; line-height: 1; }
+        .brand-mark { display: block; height: 26px; width: auto; object-fit: contain; }
         .brand-name { font-weight: 800; letter-spacing: .02em; color: var(--brand-agri); }
         .brand-name .brand-gator { color: var(--brand-gator); }
-        .brand-name .brand-suffix { color: var(--accent); font-weight: 700; }
+        .brand-suffix { color: var(--accent); font-weight: 700; }
         nav { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
         nav a { color: var(--muted); font-weight: 600; }
         nav a:hover, nav a.active { color: #fff; }
@@ -80,7 +88,7 @@
 <body>
 <div class="shell">
     <header class="appbar">
-        <x-brand suffix="admin" />
+        <x-brand compact suffix="admin" />
         <nav>
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
             <a href="{{ route('admin.feeds.index') }}" class="{{ request()->routeIs('admin.feeds.*') ? 'active' : '' }}">Flux</a>
