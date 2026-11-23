@@ -13,6 +13,19 @@ class PublishController extends Controller
 {
     public function pending(Request $request, FeedFile $feed): JsonResponse
     {
+        $columnLabels = $feed->priceColumns()
+            ->get(['csv_column', 'name', 'alias'])
+            ->mapWithKeys(function ($column) {
+                $label = trim((string) $column->name);
+                $label = preg_replace('/^prix\s+/iu', '', $label) ?: $label;
+                if ($label === '') {
+                    $label = trim((string) ($column->alias ?: $column->csv_column));
+                }
+
+                return [$column->csv_column => $label];
+            })
+            ->all();
+
         $items = PendingPriceChange::query()
             ->where('user_id', $request->user()->id)
             ->where('feed_file_id', $feed->id)
@@ -22,6 +35,7 @@ class PublishController extends Controller
                 'id' => $c->id,
                 'sku' => $c->sku,
                 'csv_column' => $c->csv_column,
+                'market_label' => $columnLabels[$c->csv_column] ?? $c->csv_column,
                 'old_price' => $c->old_price,
                 'new_price' => $c->new_price,
             ]);

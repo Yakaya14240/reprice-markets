@@ -21,28 +21,73 @@
     .product-row:hover, .product-row.active { background:#eefbf5; }
     .product-row .sku { font-weight:700; }
     .pending-bar {
-        display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;
-        border:1px dashed #94a3b8; border-radius:10px; padding:.65rem .85rem; background:#f8fafc;
+        display:flex; gap:.65rem; flex-wrap:wrap; align-items:center;
+        border:1px solid var(--border); border-radius:12px; padding:.55rem .7rem; background:#fff;
         margin-bottom:1rem;
     }
-    .pending-bar .pending-items {
-        display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; flex:1; min-width:180px;
+    .pending-summary {
+        flex:1; min-width:220px; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+        border:0; background:transparent; color:inherit; font:inherit; text-align:left;
+        cursor:pointer; padding:.25rem .35rem; border-radius:8px;
+    }
+    .pending-summary:hover, .pending-summary:focus-visible, .pending-summary.is-open {
+        background:var(--accent-soft); outline:none;
+    }
+    .pending-summary strong { white-space:nowrap; }
+    .pending-items {
+        display:flex; gap:.4rem; flex-wrap:wrap; align-items:center;
     }
     .pending-chip {
         display:inline-flex; align-items:center; gap:.3rem;
-        background:#fff; border:1px solid var(--border); border-radius:999px;
-        padding:.2rem .5rem .2rem .65rem; font-size:.82rem;
+        background:#f8fafc; border:1px solid var(--border); border-radius:999px;
+        padding:.2rem .65rem; font-size:.82rem; white-space:nowrap;
     }
-    .pending-chip .btn-remove {
-        border:0; background:transparent; color:var(--danger); font-weight:700; cursor:pointer;
-        font-size:1rem; line-height:1; padding:0 .15rem;
+    .pending-chip-more {
+        color:var(--muted); font-weight:700;
     }
-    .pending-bar .mkp-inline {
-        display:flex; gap:.45rem; flex-wrap:wrap; align-items:center;
+    .pending-queue {
+        display:none; position:fixed; inset:0; z-index:1150;
     }
-    .pending-bar .mkp-inline label {
-        display:inline-flex; align-items:center; gap:.3rem; margin:0; font-weight:500; font-size:.85rem;
+    .pending-queue.open { display:block; }
+    .pending-queue-scrim {
+        position:absolute; inset:0; background:rgba(15,23,32,.4);
     }
+    .pending-queue-panel {
+        position:absolute; top:.75rem; right:.75rem; bottom:.75rem;
+        width:min(380px, calc(100vw - 1.5rem));
+        background:#fff; border:1px solid var(--border); border-radius:12px;
+        padding:1rem 1.1rem; overflow:auto;
+        box-shadow:0 20px 50px rgba(0,0,0,.18);
+        display:flex; flex-direction:column; gap:.85rem;
+    }
+    .pending-queue-head {
+        display:flex; justify-content:space-between; align-items:center; gap:.5rem;
+    }
+    .pending-queue-head h2 { margin:0; font-size:1.1rem; }
+    .pending-queue-list {
+        list-style:none; margin:0; padding:0;
+        border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    }
+    .pending-queue-list li {
+        display:flex; justify-content:space-between; gap:.5rem; align-items:center;
+        padding:.7rem .8rem; border-bottom:1px solid var(--border); font-size:.9rem;
+    }
+    .pending-queue-list li:last-child { border-bottom:0; }
+    .pending-queue-list .btn-remove {
+        border:0; background:transparent; color:var(--danger); font-weight:700;
+        font-size:1.15rem; line-height:1; cursor:pointer; padding:0 .2rem;
+    }
+    .pending-queue-section-title { font-weight:700; margin:0 0 .25rem; }
+    .pending-queue-hint { margin:0 0 .55rem; font-size:.85rem; }
+    .pending-mkp {
+        display:grid; grid-template-columns:1fr 1fr; gap:.4rem .75rem; margin-bottom:.55rem;
+    }
+    .pending-mkp label {
+        display:flex; gap:.4rem; align-items:center; margin:0; font-weight:500; font-size:.9rem;
+    }
+    .pending-mkp-actions { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.35rem; }
+    .pending-sync { margin:0; font-size:.82rem; }
+    .pending-queue-publish { width:100%; }
     .detail-empty { color:var(--muted); padding:1rem 0; }
     .detail-panel { display:none; }
     .prices-layout.is-detail .detail-panel { display:block; }
@@ -170,35 +215,75 @@
         </div>
 
         <div class="pending-bar" id="pending-bar">
-            <strong style="white-space:nowrap;">En attente <span class="muted" id="pending-count">{{ $pending->count() }}</span></strong>
-            <div class="pending-items" id="pending-list">
-                @forelse ($pending as $change)
-                    <span class="pending-chip" data-id="{{ $change->id }}">
-                        {{ $change->sku }} · {{ $change->csv_column }} → <strong>{{ $change->new_price }}</strong>
-                        <button type="button" class="btn-remove" data-pending-id="{{ $change->id }}" title="Retirer" aria-label="Retirer">×</button>
-                    </span>
-                @empty
-                    <span class="muted" id="pending-empty">Aucune modification.</span>
-                @endforelse
-            </div>
-            <div class="mkp-inline">
-                @foreach ($marketplaces as $marketplace)
-                    <label>
-                        <input type="checkbox" class="mkp-check" value="{{ $marketplace->id }}" checked style="width:auto;margin:0;">
-                        {{ $marketplace->name }}
-                    </label>
-                @endforeach
-                <button class="btn ghost" type="button" id="mkp-all">Tout</button>
-                <button class="btn ghost" type="button" id="mkp-none">Aucun</button>
-                <button class="btn" type="button" id="btn-publish" @disabled(! $canWrite)>Publier</button>
-            </div>
-            <span class="muted" style="font-size:.8rem;width:100%;" id="write-destination">
-                Sync : <strong>{{ $writeDestination }}</strong>
-                @unless($canWrite)
-                    <span style="color:var(--danger);"> — non configurable</span>
-                @endunless
-                · Aucune MKP = CSV seul
-            </span>
+            <button type="button" class="pending-summary" id="pending-summary" aria-expanded="false" aria-controls="pending-queue">
+                <strong><span id="pending-count">{{ $pending->count() }}</span> en attente</strong>
+                <span class="pending-items" id="pending-chips">
+                    @forelse ($pending->take(2) as $change)
+                        @php($label = $priceColumnLabels[$change->csv_column] ?? $change->csv_column)
+                        <span class="pending-chip">{{ $change->sku }} · {{ $label }} → {{ $change->new_price }}</span>
+                    @empty
+                        <span class="muted" id="pending-empty">Aucune modification.</span>
+                    @endforelse
+                    @if ($pending->count() > 2)
+                        <span class="pending-chip pending-chip-more">+{{ $pending->count() - 2 }}</span>
+                    @endif
+                </span>
+            </button>
+            <button class="btn" type="button" id="btn-publish" @disabled(! $canWrite || $pending->isEmpty())>Publier</button>
+        </div>
+
+        <div class="pending-queue" id="pending-queue">
+            <div class="pending-queue-scrim" id="pending-queue-scrim"></div>
+            <aside class="pending-queue-panel" role="dialog" aria-modal="true" aria-labelledby="pending-queue-title">
+                <div class="pending-queue-head">
+                    <h2 id="pending-queue-title">File d’attente</h2>
+                    <button class="btn ghost" type="button" id="pending-queue-close">Fermer</button>
+                </div>
+
+                <ul class="pending-queue-list" id="pending-list">
+                    @forelse ($pending as $change)
+                        @php($label = $priceColumnLabels[$change->csv_column] ?? $change->csv_column)
+                        <li data-id="{{ $change->id }}">
+                            <span>
+                                <strong>{{ $change->sku }}</strong>
+                                · {{ $label }}
+                                · {{ $change->old_price }} → <strong>{{ $change->new_price }}</strong>
+                            </span>
+                            <button type="button" class="btn-remove" data-pending-id="{{ $change->id }}" title="Retirer" aria-label="Retirer">×</button>
+                        </li>
+                    @empty
+                        <li class="muted" id="pending-list-empty">Aucune modification.</li>
+                    @endforelse
+                </ul>
+
+                <div>
+                    <div class="pending-queue-section-title">Marketplaces</div>
+                    <p class="muted pending-queue-hint">Aucune cochée = sync CSV uniquement.</p>
+                    <div class="pending-mkp">
+                        @foreach ($marketplaces as $marketplace)
+                            <label>
+                                <input type="checkbox" class="mkp-check" value="{{ $marketplace->id }}" checked style="width:auto;margin:0;">
+                                {{ $marketplace->name }}
+                            </label>
+                        @endforeach
+                    </div>
+                    <div class="pending-mkp-actions">
+                        <button class="btn ghost" type="button" id="mkp-all">Tout</button>
+                        <button class="btn ghost" type="button" id="mkp-none">Aucun</button>
+                    </div>
+                </div>
+
+                <p class="muted pending-sync" id="write-destination">
+                    Sync : <strong>{{ $writeDestination }}</strong>
+                    @unless($canWrite)
+                        <span style="color:var(--danger);"> — non configurable</span>
+                    @endunless
+                </p>
+
+                <button class="btn pending-queue-publish" type="button" id="btn-publish-panel" @disabled(! $canWrite || $pending->isEmpty())>
+                    Publier {{ $pending->count() }} modification{{ $pending->count() > 1 ? 's' : '' }}
+                </button>
+            </aside>
         </div>
 
         <div class="prices-layout" id="prices-layout">
@@ -282,7 +367,12 @@
     const metaEl = document.getElementById('list-meta');
     const detailEl = document.getElementById('detail-card');
     const pendingList = document.getElementById('pending-list');
+    const pendingChips = document.getElementById('pending-chips');
     const pendingCount = document.getElementById('pending-count');
+    const pendingSummary = document.getElementById('pending-summary');
+    const pendingQueue = document.getElementById('pending-queue');
+    const btnPublish = document.getElementById('btn-publish');
+    const btnPublishPanel = document.getElementById('btn-publish-panel');
     const loadBar = document.getElementById('load-bar');
     const loadLabel = document.getElementById('load-label');
     const lock = document.getElementById('ui-lock');
@@ -296,6 +386,7 @@
     const publishModal = document.getElementById('publish-modal');
     const publishNoteInput = document.getElementById('publish-note');
     const publishModalSummary = document.getElementById('publish-modal-summary');
+    const canWrite = @json($canWrite);
 
     let offset = 0;
     let loadingList = false;
@@ -602,20 +693,76 @@
         }
     }
 
-    async function refreshPending() {
-        const data = await api(endpoints.pending);
-        const items = data.pending || [];
-        pendingCount.textContent = items.length;
+    function marketLabel(item) {
+        return item.market_label || displayMarketName(item.csv_column) || item.csv_column;
+    }
+
+    function syncPublishButtons(count) {
+        const disabled = !canWrite || count < 1;
+        if (btnPublish) {
+            btnPublish.disabled = disabled;
+        }
+        if (btnPublishPanel) {
+            btnPublishPanel.disabled = disabled;
+            btnPublishPanel.textContent = count < 1
+                ? 'Publier'
+                : `Publier ${count} modification${count > 1 ? 's' : ''}`;
+        }
+    }
+
+    function renderPendingChips(items) {
         if (!items.length) {
-            pendingList.innerHTML = '<span class="muted" id="pending-empty">Aucune modification.</span>';
+            pendingChips.innerHTML = '<span class="muted" id="pending-empty">Aucune modification.</span>';
+            return;
+        }
+        const visible = items.slice(0, 2).map(i => `
+            <span class="pending-chip">${escapeHtml(i.sku)} · ${escapeHtml(marketLabel(i))} → ${escapeHtml(i.new_price)}</span>
+        `).join('');
+        const more = items.length > 2
+            ? `<span class="pending-chip pending-chip-more">+${items.length - 2}</span>`
+            : '';
+        pendingChips.innerHTML = visible + more;
+    }
+
+    function renderPendingList(items) {
+        if (!items.length) {
+            pendingList.innerHTML = '<li class="muted" id="pending-list-empty">Aucune modification.</li>';
             return;
         }
         pendingList.innerHTML = items.map(i => `
-            <span class="pending-chip" data-id="${escapeHtml(i.id)}">
-                ${escapeHtml(i.sku)} · ${escapeHtml(i.csv_column)} → <strong>${escapeHtml(i.new_price)}</strong>
+            <li data-id="${escapeHtml(i.id)}">
+                <span>
+                    <strong>${escapeHtml(i.sku)}</strong>
+                    · ${escapeHtml(marketLabel(i))}
+                    · ${escapeHtml(i.old_price ?? '—')} → <strong>${escapeHtml(i.new_price)}</strong>
+                </span>
                 <button type="button" class="btn-remove" data-pending-id="${escapeHtml(i.id)}" title="Retirer" aria-label="Retirer">×</button>
-            </span>
+            </li>
         `).join('');
+    }
+
+    async function refreshPending() {
+        const data = await api(endpoints.pending);
+        const items = data.pending || [];
+        pendingCount.textContent = String(items.length);
+        renderPendingChips(items);
+        renderPendingList(items);
+        syncPublishButtons(items.length);
+        if (!items.length) {
+            closePendingQueue();
+        }
+    }
+
+    function openPendingQueue() {
+        pendingQueue.classList.add('open');
+        pendingSummary.classList.add('is-open');
+        pendingSummary.setAttribute('aria-expanded', 'true');
+    }
+
+    function closePendingQueue() {
+        pendingQueue.classList.remove('open');
+        pendingSummary.classList.remove('is-open');
+        pendingSummary.setAttribute('aria-expanded', 'false');
     }
 
     async function removePending(id) {
@@ -722,6 +869,7 @@
             showToast('Aucune modification en attente.', 'warn');
             return;
         }
+        closePendingQueue();
         const marketplaceIds = selectedMarketplaces();
         const mkpLabel = marketplaceIds.length
             ? `${marketplaceIds.length} marketplace(s)`
@@ -774,7 +922,14 @@
         searchTimer = setTimeout(() => loadMore(true), 250);
     });
     document.getElementById('btn-refresh').addEventListener('click', refreshFeed);
-    document.getElementById('btn-publish').addEventListener('click', openPublishModal);
+    btnPublish?.addEventListener('click', openPublishModal);
+    btnPublishPanel?.addEventListener('click', openPublishModal);
+    pendingSummary?.addEventListener('click', () => {
+        if (pendingQueue.classList.contains('open')) closePendingQueue();
+        else openPendingQueue();
+    });
+    document.getElementById('pending-queue-close')?.addEventListener('click', closePendingQueue);
+    document.getElementById('pending-queue-scrim')?.addEventListener('click', closePendingQueue);
     document.getElementById('publish-modal-cancel')?.addEventListener('click', closePublishModal);
     document.getElementById('publish-modal-confirm')?.addEventListener('click', () => publish(publishNoteInput?.value || ''));
     publishModal?.addEventListener('click', (event) => { if (event.target === publishModal) closePublishModal(); });
@@ -796,6 +951,7 @@
         if (event.key !== 'Escape') return;
         if (publishModal?.classList.contains('open')) { closePublishModal(); return; }
         if (chartModal?.classList.contains('open')) { closePriceChartModal(); return; }
+        if (pendingQueue?.classList.contains('open')) { closePendingQueue(); return; }
         if (layoutEl.classList.contains('is-detail')) setDetailMode(false);
     });
 

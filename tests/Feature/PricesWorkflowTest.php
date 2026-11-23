@@ -63,6 +63,20 @@ class PricesWorkflowTest extends TestCase
 
         $this->assertSame(1, PendingPriceChange::query()->count());
 
+        $this->actingAs($user)
+            ->getJson(route('api.pending.index', $feed))
+            ->assertOk()
+            ->assertJsonPath('pending.0.sku', 'ABC1')
+            ->assertJsonPath('pending.0.market_label', 'France')
+            ->assertJsonPath('pending.0.csv_column', 'Prix_TTC');
+
+        $this->actingAs($user)
+            ->get(route('prices.index'))
+            ->assertOk()
+            ->assertSee('pending-summary', false)
+            ->assertSee('File d’attente', false)
+            ->assertDontSee('mkp-inline', false);
+
         $pending = PendingPriceChange::query()->firstOrFail();
 
         $this->actingAs($user)
