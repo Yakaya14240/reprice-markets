@@ -29,12 +29,13 @@ final class Pri01Exporter
         foreach ($offers as $offer) {
             if ($withChannels && $offer->channels !== []) {
                 foreach ($offer->channels as $channel) {
+                    $discount = $channel['discount_price'] ?? null;
                     $lines[] = implode(';', [
                         $offer->sku,
-                        $this->formatPrice($channel['price']),
-                        $offer->discountPrice !== null ? $this->formatPrice($offer->discountPrice) : '',
-                        $offer->discountStartDate ?? '',
-                        $offer->discountEndDate ?? '',
+                        $this->formatPrice((float) $channel['price']),
+                        $discount !== null ? $this->formatPrice((float) $discount) : '',
+                        $channel['discount_start_date'] ?? '',
+                        $channel['discount_end_date'] ?? '',
                         $channel['id'],
                     ]);
                 }

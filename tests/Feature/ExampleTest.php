@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,12 +17,19 @@ class ExampleTest extends TestCase
 
     public function test_login_page_is_reachable(): void
     {
-        $this->get(route('login'))->assertOk();
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('Connexion', false)
+            ->assertSee('Agri', false)
+            ->assertSee('gator', false)
+            ->assertSee('Se connecter', false)
+            ->assertSee('name="email"', false)
+            ->assertSee('name="password"', false);
     }
 
     public function test_admin_dashboard_requires_admin(): void
     {
-        $user = \App\Models\User::factory()->create();
+        $user = User::factory()->create();
 
         $this->actingAs($user)
             ->get(route('admin.dashboard'))
@@ -30,7 +38,7 @@ class ExampleTest extends TestCase
 
     public function test_admin_can_open_admin_dashboard(): void
     {
-        $admin = \App\Models\User::factory()->admin()->create();
+        $admin = User::factory()->admin()->create();
 
         $this->actingAs($admin)
             ->get(route('admin.dashboard'))

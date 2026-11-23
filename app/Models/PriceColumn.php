@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['feed_file_id', 'name', 'csv_column', 'alias', 'currency_id', 'is_active'])]
+#[Fillable(['feed_file_id', 'name', 'csv_column', 'alias', 'currency_id', 'is_active', 'is_public_price', 'is_chart_default'])]
 class PriceColumn extends Model
 {
     use SoftDeletes;
@@ -17,6 +17,8 @@ class PriceColumn extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_public_price' => 'boolean',
+            'is_chart_default' => 'boolean',
         ];
     }
 
@@ -30,13 +32,8 @@ class PriceColumn extends Model
         return $this->belongsTo(Currency::class);
     }
 
-    public function shopMappings(): HasMany
+    public function marketplaceMappings(): HasMany
     {
-        return $this->hasMany(MarketplaceShopPrice::class);
-    }
-
-    public function channelMappings(): HasMany
-    {
-        return $this->hasMany(ChannelPriceMapping::class);
+        return $this->hasMany(MarketplacePriceMapping::class);
     }
 }

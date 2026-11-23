@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Admin — reprice-markets')</title>
+    <title>@yield('title', 'Admin — Agrigator')</title>
     <style>
         :root {
             --bg: #111827;
@@ -14,6 +14,8 @@
             --muted: #9ca3af;
             --accent: #38bdf8;
             --border: #374151;
+            --brand-agri: #f3f4f6;
+            --brand-gator: #22c55e;
         }
         * { box-sizing: border-box; }
         body {
@@ -30,8 +32,9 @@
             gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
             border-bottom: 1px solid var(--border); padding-bottom: .9rem;
         }
-        .brand { font-weight: 800; letter-spacing: .02em; }
-        .brand span { color: var(--accent); }
+        .brand-name { font-weight: 800; letter-spacing: .02em; color: var(--brand-agri); }
+        .brand-name .brand-gator { color: var(--brand-gator); }
+        .brand-name .brand-suffix { color: var(--accent); font-weight: 700; }
         nav { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
         nav a { color: var(--muted); font-weight: 600; }
         nav a:hover, nav a.active { color: #fff; }
@@ -40,7 +43,8 @@
             border-radius: 12px; padding: 1rem; margin-bottom: 1rem;
         }
         .muted { color: var(--muted); }
-        table { width: 100%; border-collapse: collapse; }
+        .card { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 640px; }
         th, td { text-align: left; padding: .65rem .4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
         th { color: var(--muted); font-size: .8rem; text-transform: uppercase; }
         label { display: block; font-weight: 600; margin-bottom: .35rem; }
@@ -61,19 +65,31 @@
         .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
         .stat { font-size: 1.75rem; font-weight: 700; }
         .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+        .pagination { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: 1rem; align-items: center; }
+        .pagination > * { color: var(--muted); }
+        .pagination .page-link, .pagination a, .pagination span {
+            display: inline-block; padding: .35rem .6rem; border: 1px solid var(--border);
+            border-radius: 6px; color: var(--text); background: #111827;
+        }
+        .pagination .active span, .pagination [aria-current="page"] span {
+            border-color: var(--accent); color: #0b1220; background: var(--accent);
+        }
     </style>
+    @stack('styles')
 </head>
 <body>
 <div class="shell">
     <header class="appbar">
-        <div class="brand">reprice-markets <span>admin</span></div>
+        <x-brand suffix="admin" />
         <nav>
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
             <a href="{{ route('admin.feeds.index') }}" class="{{ request()->routeIs('admin.feeds.*') ? 'active' : '' }}">Flux</a>
             <a href="{{ route('admin.price-columns.index') }}" class="{{ request()->routeIs('admin.price-columns.*') ? 'active' : '' }}">Mapping prix</a>
+            <a href="{{ route('admin.product-sheet.index') }}" class="{{ request()->routeIs('admin.product-sheet.*') ? 'active' : '' }}">Mapping fiche</a>
             <a href="{{ route('admin.currencies.index') }}" class="{{ request()->routeIs('admin.currencies.*') ? 'active' : '' }}">Devises</a>
             <a href="{{ route('admin.marketplaces.index') }}" class="{{ request()->routeIs('admin.marketplaces.*') ? 'active' : '' }}">Marketplaces</a>
             <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">Utilisateurs</a>
+            <a href="{{ route('dashboard') }}">Suivi</a>
             <a href="{{ route('prices.index') }}">↩ Retour app</a>
             <form method="POST" action="{{ route('logout') }}" style="display:inline;">
                 @csrf

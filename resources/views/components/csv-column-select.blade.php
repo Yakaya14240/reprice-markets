@@ -4,6 +4,7 @@
     'value' => null,
     'required' => true,
     'style' => null,
+    'form' => null,
 ])
 
 @php
@@ -16,6 +17,7 @@
         name="{{ $name }}"
         value="{{ $selected }}"
         @if($required) required @endif
+        @if($form) form="{{ $form }}" @endif
         placeholder="Chargez d’abord le flux pour lister les colonnes"
         @if($style) style="{{ $style }}" @endif
     >
@@ -23,7 +25,7 @@
         Aucune colonne connue pour ce flux. Utilisez « Recharger les colonnes CSV ».
     </p>
 @else
-    <select name="{{ $name }}" @if($required) required @endif @if($style) style="{{ $style }}" @endif>
+    <select name="{{ $name }}" @if($required) required @endif @if($form) form="{{ $form }}" @endif @if($style) style="{{ $style }}" @endif>
         <option value="">— choisir une colonne —</option>
         @foreach ($headers as $header)
             <option value="{{ $header }}" @selected($selected === $header)>{{ $header }}</option>

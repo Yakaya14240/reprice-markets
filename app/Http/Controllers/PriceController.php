@@ -31,6 +31,8 @@ class PriceController extends Controller
             'pending' => $pending,
             'marketplaces' => Marketplace::query()->where('is_active', true)->orderBy('name')->get(),
             'bootRefresh' => (bool) session('boot_refresh'),
+            'writeDestination' => $feed?->writeDestinationLabel() ?? 'non configurée',
+            'canWrite' => (bool) $feed?->hasWritableDestination(),
         ]);
     }
 }

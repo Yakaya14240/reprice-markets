@@ -17,8 +17,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'client_key',
     'client_secret',
     'shop_ids',
-    'supports_channels',
-    'supports_multi_shop',
     'is_active',
 ])]
 #[Hidden(['api_key', 'client_key', 'client_secret'])]
@@ -32,20 +30,13 @@ class Marketplace extends Model
             'client_key' => 'encrypted',
             'client_secret' => 'encrypted',
             'shop_ids' => 'array',
-            'supports_channels' => 'boolean',
-            'supports_multi_shop' => 'boolean',
             'is_active' => 'boolean',
         ];
     }
 
-    public function shopPrices(): HasMany
+    public function priceMappings(): HasMany
     {
-        return $this->hasMany(MarketplaceShopPrice::class);
-    }
-
-    public function channelMappings(): HasMany
-    {
-        return $this->hasMany(ChannelPriceMapping::class);
+        return $this->hasMany(MarketplacePriceMapping::class);
     }
 
     public function pushBatches(): HasMany

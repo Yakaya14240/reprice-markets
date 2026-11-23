@@ -102,13 +102,44 @@ final class FeedSnapshotService
      */
     public function persistProducts(FeedFile $feed, array $headers, array $products): void
     {
+        if (function_exists('ini_set')) {
+            @ini_set('memory_limit', '1024M');
+        }
+
         $snapshot = $this->ensureSnapshot($feed);
         $path = $snapshot->storage_path ?: "feeds/snapshots/feed_{$feed->id}.json";
+        $absolute = Storage::disk('local')->path($path);
+        $directory = dirname($absolute);
+        if (! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
+            throw new \RuntimeException("Unable to create snapshot directory: {$directory}");
+        }
 
-        Storage::disk('local')->put($path, json_encode([
-            'headers' => $headers,
-            'products' => $products,
-        ], JSON_UNESCAPED_UNICODE));
+        // Stream JSON to disk to avoid a second giant in-memory string copy of the feed.
+        $handle = fopen($absolute, 'wb');
+        if ($handle === false) {
+            throw new \RuntimeException("Unable to open snapshot for writing: {$absolute}");
+        }
+
+        try {
+            fwrite($handle, '{"headers":');
+            fwrite($handle, json_encode($headers, JSON_UNESCAPED_UNICODE));
+            fwrite($handle, ',"products":[');
+            $first = true;
+            foreach ($products as $product) {
+                if (! $first) {
+                    fwrite($handle, ',');
+                }
+                $first = false;
+                $encoded = json_encode($product, JSON_UNESCAPED_UNICODE);
+                if ($encoded === false) {
+                    throw new \RuntimeException('Unable to encode product for snapshot JSON.');
+                }
+                fwrite($handle, $encoded);
+            }
+            fwrite($handle, ']}');
+        } finally {
+            fclose($handle);
+        }
 
         $snapshot->update([
             'storage_path' => $path,
@@ -116,6 +147,7 @@ final class FeedSnapshotService
             'products_count' => count($products),
             'status' => FeedSnapshotStatus::Ready,
             'loaded_at' => now(),
+            'error_message' => null,
         ]);
     }
 }

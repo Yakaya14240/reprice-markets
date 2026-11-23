@@ -6,8 +6,12 @@
 <label>Email</label>
 <input name="email" type="email" value="{{ old('email', $u?->email) }}" required>
 
-<label>Mot de passe {{ $u ? '(laisser vide pour conserver)' : '' }}</label>
-<input name="password" type="password" autocomplete="new-password" @required(! $u)>
+<x-secret-field
+    name="password"
+    label="Mot de passe"
+    :keep-on-blank="(bool) $u"
+    :required="! $u"
+/>
 
 <label>Rôle</label>
 <select name="role" required>

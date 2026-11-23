@@ -62,5 +62,13 @@ class PricesWorkflowTest extends TestCase
         ]);
 
         $this->assertSame(1, PendingPriceChange::query()->count());
+
+        $pending = PendingPriceChange::query()->firstOrFail();
+
+        $this->actingAs($user)
+            ->deleteJson(route('api.pending.destroy', [$feed, $pending]))
+            ->assertOk();
+
+        $this->assertSame(0, PendingPriceChange::query()->count());
     }
 }

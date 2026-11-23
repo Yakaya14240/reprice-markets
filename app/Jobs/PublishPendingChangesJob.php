@@ -20,6 +20,7 @@ class PublishPendingChangesJob implements ShouldQueue
         public int $userId,
         public int $feedFileId,
         public array $marketplaceIds,
+        public ?string $note = null,
     ) {}
 
     public function handle(PublishPendingChangesService $publisher): void
@@ -32,13 +33,15 @@ class PublishPendingChangesJob implements ShouldQueue
         }
 
         try {
-            $publisher->publish($user, $feed, $this->marketplaceIds);
+            $publisher->publish($user, $feed, $this->marketplaceIds, $this->note);
         } catch (\Throwable $e) {
             Log::error('PublishPendingChangesJob failed', [
                 'user_id' => $this->userId,
                 'feed_file_id' => $this->feedFileId,
                 'error' => $e->getMessage(),
             ]);
+
+            throw $e;
         }
     }
 }

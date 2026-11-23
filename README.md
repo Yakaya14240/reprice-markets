@@ -1,4 +1,4 @@
-# reprice-markets
+# Agrigator
 
 Outil interne de **repricing multi-marketplace** (Sun-Chauffage / Multithermique).
 

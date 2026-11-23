@@ -14,7 +14,7 @@ class CurrencyController extends Controller
     public function index(): View
     {
         return view('admin.currencies.index', [
-            'currencies' => Currency::query()->orderBy('sort_order')->orderBy('code')->get(),
+            'currencies' => Currency::query()->orderBy('sort_order')->orderBy('code')->paginate(20),
         ]);
     }
 
@@ -42,6 +42,20 @@ class CurrencyController extends Controller
         return redirect()->route('admin.currencies.index')->with('status', 'Devise mise à jour.');
     }
 
+    public function destroy(Currency $currency): RedirectResponse
+    {
+        if ($currency->priceColumns()->exists()) {
+            return redirect()->route('admin.currencies.index')
+                ->with('status', "Impossible de supprimer « {$currency->code} » : utilisée par au moins une colonne prix.");
+        }
+
+        $code = $currency->code;
+        $currency->delete();
+
+        return redirect()->route('admin.currencies.index')
+            ->with('status', "Devise « {$code} » supprimée.");
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -67,7 +81,7 @@ class CurrencyController extends Controller
             'symbol' => $data['symbol'] ?? null,
             'decimals' => (int) $data['decimals'],
             'sort_order' => (int) ($data['sort_order'] ?? 100),
-            'is_active' => $request->boolean('is_active', true),
+            'is_active' => $request->boolean('is_active'),
         ];
     }
 }

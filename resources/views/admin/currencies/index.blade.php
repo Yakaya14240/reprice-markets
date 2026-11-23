@@ -22,12 +22,20 @@
                     <td>{{ $currency->decimals }}</td>
                     <td>{{ $currency->sort_order }}</td>
                     <td>{{ $currency->is_active ? 'oui' : 'non' }}</td>
-                    <td><a href="{{ route('admin.currencies.edit', $currency) }}">Éditer</a></td>
+                    <td class="actions" style="gap:.5rem;">
+                        <a href="{{ route('admin.currencies.edit', $currency) }}">Éditer</a>
+                        <form method="POST" action="{{ route('admin.currencies.destroy', $currency) }}" onsubmit="return confirm('Supprimer la devise {{ $currency->code }} ?');" style="display:inline;">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn secondary" type="submit">Supprimer</button>
+                        </form>
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="muted">Aucune devise. Lancez le seeder.</td></tr>
             @endforelse
             </tbody>
         </table>
+        {{ $currencies->links() }}
     </div>
 @endsection

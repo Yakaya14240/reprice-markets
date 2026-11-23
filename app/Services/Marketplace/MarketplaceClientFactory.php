@@ -20,7 +20,9 @@ final class MarketplaceClientFactory
         return match ($marketplace->driver) {
             MarketplaceDriver::Mirakl => $this->miraklClient,
             MarketplaceDriver::Kaufland => $this->kauflandClient,
-            default => throw new InvalidArgumentException("Unsupported marketplace driver [{$marketplace->driver->value}]."),
+            MarketplaceDriver::Other => throw new InvalidArgumentException(
+                "Marketplace [{$marketplace->slug}] utilise le driver « autre » : aucun client de push n’est branché."
+            ),
         };
     }
 }

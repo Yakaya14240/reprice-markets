@@ -4,6 +4,7 @@ namespace App\Services\Feed;
 
 use App\Enums\FeedSourceType;
 use App\Models\FeedFile;
+use App\Support\SftpRemotePath;
 use Illuminate\Support\Facades\Http;
 use phpseclib4\Net\SFTP;
 use RuntimeException;
@@ -34,21 +35,30 @@ final class FeedIO
      */
     public function write(FeedFile $feed, array $headers, array $products): void
     {
+        if (! $feed->hasWritableDestination()) {
+            throw new RuntimeException(
+                'Destination d’écriture non configurée. Renseignez un chemin local ou SFTP (write_location) en admin.'
+            );
+        }
+
         $sourceType = $feed->effectiveWriteSourceType();
         $location = $feed->effectiveWriteLocation();
-
-        if ($sourceType === FeedSourceType::Url) {
-            throw new RuntimeException('URL sources are read-only. Configure a write location (SFTP or local).');
-        }
 
         $rows = $this->parser->toRows($headers, $products);
         $content = $this->rowsToContent($rows, $feed->delimiter ?: "\t");
 
-        match ($sourceType) {
-            FeedSourceType::Local => $this->writeLocal($location, $content),
-            FeedSourceType::Sftp => $this->writeSftp($feed, $location, $content),
-            FeedSourceType::Url => throw new RuntimeException('Unsupported write source.'),
-        };
+        try {
+            match ($sourceType) {
+                FeedSourceType::Local => $this->writeLocal($location, $content),
+                FeedSourceType::Sftp => $this->writeSftp($feed, $location, $content),
+                FeedSourceType::Url => throw new RuntimeException('URL is not a writable destination.'),
+            };
+        } catch (\Throwable $e) {
+            throw new RuntimeException(
+                "Échec écriture flux [{$sourceType->label()} → {$location}] : ".$e->getMessage(),
+                previous: $e
+            );
+        }
     }
 
     /**
@@ -63,6 +73,57 @@ final class FeedIO
                 FeedSourceType::Url => $this->probeUrl((string) $feed->location),
                 FeedSourceType::Local => $this->probeLocal((string) $feed->location),
                 FeedSourceType::Sftp => $this->probeSftp($feed, (string) $feed->location),
+            };
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'status' => null,
+                'bytes' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Check that the configured write destination is usable.
+     *
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    public function probeWrite(FeedFile $feed): array
+    {
+        try {
+            if (! $feed->hasWritableDestination()) {
+                return [
+                    'ok' => false,
+                    'status' => null,
+                    'bytes' => null,
+                    'message' => 'Écriture non configurée (type + chemin d’écriture requis pour une source URL).',
+                ];
+            }
+
+            $type = $feed->effectiveWriteSourceType();
+            $location = $feed->effectiveWriteLocation();
+
+            if ($type === FeedSourceType::Sftp && $this->looksLikeWindowsLocalPath($location)) {
+                return [
+                    'ok' => false,
+                    'status' => null,
+                    'bytes' => null,
+                    'message' => "Chemin Windows local détecté ({$location}) avec type SFTP. "
+                        .'Soit passez le type d’écriture en « Fichier local », '
+                        .'soit mettez un chemin distant Unix (ex. /test_clement/Flux.csv).',
+                ];
+            }
+
+            return match ($type) {
+                FeedSourceType::Local => $this->probeLocalWritable($location),
+                FeedSourceType::Sftp => $this->probeSftpWritable($feed, $location),
+                FeedSourceType::Url => [
+                    'ok' => false,
+                    'status' => null,
+                    'bytes' => null,
+                    'message' => 'URL ne peut pas servir de destination d’écriture.',
+                ],
             };
         } catch (\Throwable $e) {
             return [
@@ -96,7 +157,7 @@ final class FeedIO
         }
 
         if (file_put_contents($path, $content) === false) {
-            throw new RuntimeException("Unable to write local feed: {$path}");
+            throw new RuntimeException("Unable to write local feed file: {$path}");
         }
     }
 
@@ -203,6 +264,41 @@ final class FeedIO
     /**
      * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
      */
+    private function probeLocalWritable(string $path): array
+    {
+        if (is_dir($path)) {
+            return [
+                'ok' => false,
+                'status' => null,
+                'bytes' => null,
+                'message' => "Chemin local = répertoire ({$path}). Indiquez un fichier complet, ex. {$path}".DIRECTORY_SEPARATOR.'Flux.csv',
+            ];
+        }
+
+        $dir = dirname($path);
+        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            return ['ok' => false, 'status' => null, 'bytes' => null, 'message' => "Répertoire non créable: {$dir}"];
+        }
+
+        if (is_file($path) && ! is_writable($path)) {
+            return ['ok' => false, 'status' => null, 'bytes' => null, 'message' => "Fichier non inscriptible: {$path}"];
+        }
+
+        if (! is_file($path) && ! is_writable($dir)) {
+            return ['ok' => false, 'status' => null, 'bytes' => null, 'message' => "Répertoire non inscriptible: {$dir}"];
+        }
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'bytes' => is_file($path) ? (filesize($path) ?: 0) : null,
+            'message' => "OK — écriture locale possible → {$path}",
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
     private function probeSftp(FeedFile $feed, string $remotePath): array
     {
         $sftp = $this->connectSftp($feed);
@@ -219,6 +315,107 @@ final class FeedIO
         ];
     }
 
+    /**
+     * @return array{ok: bool, status: int|null, bytes: int|null, message: string}
+     */
+    private function probeSftpWritable(FeedFile $feed, string $remotePath): array
+    {
+        $host = (string) (($feed->connection_config['host'] ?? null) ?: config('feeds.sftp.host'));
+        $remotePath = SftpRemotePath::normalize($remotePath, $host) ?? '';
+        if ($remotePath === '') {
+            return [
+                'ok' => false,
+                'status' => null,
+                'bytes' => null,
+                'message' => 'Chemin SFTP d’écriture invalide. Exemple (compte dans current) : test_clement/Flux_Sun-chauffage.csv',
+            ];
+        }
+
+        $sftp = $this->connectSftp($feed);
+        $pwd = method_exists($sftp, 'pwd') ? (string) $sftp->pwd() : '?';
+
+        // phpseclib4::stat() throws SSH_FX_NO_SUCH_FILE when the target file does not exist yet.
+        // Use file_exists/is_dir — writing creates the file; it must not be required beforehand.
+        $isDir = str_ends_with($remotePath, '/') || $sftp->is_dir($remotePath);
+
+        if ($isDir) {
+            $dir = rtrim($remotePath, '/') ?: '.';
+            $probePath = $dir.'/.agrigator-write-probe';
+        } else {
+            $dir = dirname(str_replace('\\', '/', $remotePath));
+            if ($dir === '.' || $dir === '\\' || $dir === '') {
+                $dir = '.';
+            } else {
+                $dir = SftpRemotePath::normalize($dir, $host) ?? $dir;
+            }
+            $probePath = $remotePath.'.agrigator-write-probe';
+        }
+
+        if ($dir !== '.' && $dir !== '/' && ! $sftp->file_exists($dir)) {
+            try {
+                $sftp->mkdir($dir, -1, true);
+            } catch (\Throwable $e) {
+                $listing = $this->safeSftpListing($sftp, '.');
+
+                return [
+                    'ok' => false,
+                    'status' => null,
+                    'bytes' => null,
+                    'message' => "Répertoire SFTP introuvable/non créable sur {$host}: {$dir}. "
+                        ."Home SFTP={$pwd}. Contenu du home : {$listing}. "
+                        .'Si le compte ouvre current, utilisez test_clement/Flux_Sun-chauffage.csv (chemin relatif). '
+                        .'Détail: '.$e->getMessage(),
+                ];
+            }
+        }
+
+        try {
+            $sftp->put($probePath, "agrigator write probe\n");
+            try {
+                $sftp->delete($probePath);
+            } catch (\Throwable) {
+                // ignore cleanup failure
+            }
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'status' => null,
+                'bytes' => null,
+                'message' => "Écriture SFTP impossible sur {$host} → {$probePath} (home={$pwd}) — ".$e->getMessage(),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'bytes' => null,
+            'message' => "OK — écriture SFTP possible → {$host}:{$remotePath}",
+        ];
+    }
+
+    private function safeSftpListing(SFTP $sftp, string $dir): string
+    {
+        try {
+            $list = $sftp->nlist($dir);
+            $list = array_values(array_filter(
+                $list,
+                static fn (string $name): bool => ! in_array($name, ['.', '..'], true)
+            ));
+            $list = array_slice($list, 0, 12);
+
+            return $list === [] ? '(vide)' : implode(', ', $list);
+        } catch (\Throwable) {
+            return '(listing impossible)';
+        }
+    }
+
+    private function looksLikeWindowsLocalPath(string $path): bool
+    {
+        $path = trim($path);
+
+        return (bool) preg_match('/^[A-Za-z]:[\\\\\\/]/', $path) || str_starts_with($path, '\\\\');
+    }
+
     private function readSftp(FeedFile $feed, string $remotePath): string
     {
         $sftp = $this->connectSftp($feed);
@@ -232,9 +429,22 @@ final class FeedIO
 
     private function writeSftp(FeedFile $feed, string $remotePath, string $content): void
     {
+        $host = (string) (($feed->connection_config['host'] ?? null) ?: config('feeds.sftp.host'));
+        $remotePath = SftpRemotePath::normalize($remotePath, $host) ?? $remotePath;
         $sftp = $this->connectSftp($feed);
-        if (! $sftp->put($remotePath, $content)) {
-            throw new RuntimeException("Unable to upload SFTP feed: {$remotePath}");
+
+        $dir = dirname(str_replace('\\', '/', $remotePath));
+        if ($dir !== '/' && $dir !== '.' && $dir !== '' && ! $sftp->file_exists($dir)) {
+            $sftp->mkdir($dir, -1, true);
+        }
+
+        try {
+            $sftp->put($remotePath, $content);
+        } catch (\Throwable $e) {
+            throw new RuntimeException(
+                "Unable to upload SFTP feed to {$host}:{$remotePath} — ".$e->getMessage(),
+                previous: $e
+            );
         }
     }
 
@@ -247,12 +457,17 @@ final class FeedIO
         $password = (string) ($config['password'] ?? config('feeds.sftp.password'));
 
         if ($host === '' || $username === '') {
-            throw new RuntimeException('SFTP credentials are missing for this feed.');
+            throw new RuntimeException('SFTP credentials are missing for this feed (host/username).');
         }
 
         $sftp = new SFTP($host, $port);
-        if (! $sftp->login($username, $password)) {
-            throw new RuntimeException('SFTP authentication failed.');
+        try {
+            $sftp->login($username, $password);
+        } catch (\Throwable $e) {
+            throw new RuntimeException(
+                "SFTP authentication failed for {$username}@{$host}:{$port} — ".$e->getMessage(),
+                previous: $e
+            );
         }
 
         return $sftp;
@@ -264,7 +479,7 @@ final class FeedIO
     private function browserHeaders(): array
     {
         return [
-            'User-Agent' => 'Mozilla/5.0 (compatible; reprice-markets/1.0; +internal)',
+            'User-Agent' => 'Mozilla/5.0 (compatible; Agrigator/1.0; +internal)',
             'Accept' => 'text/csv,text/plain,*/*',
         ];
     }

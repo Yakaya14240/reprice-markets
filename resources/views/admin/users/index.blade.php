@@ -18,10 +18,20 @@
                     <td>{{ $user->email }}</td>
                     <td>{{ $user->role->label() }}</td>
                     <td>{{ $user->is_active ? 'oui' : 'non' }}</td>
-                    <td><a href="{{ route('admin.users.edit', $user) }}">Éditer</a></td>
+                    <td class="actions" style="gap:.5rem;">
+                        <a href="{{ route('admin.users.edit', $user) }}">Éditer</a>
+                        @unless(auth()->id() === $user->id)
+                            <form method="POST" action="{{ route('admin.users.destroy', $user) }}" onsubmit="return confirm('Archiver le compte de {{ $user->name }} ? Il ne pourra plus se connecter.');" style="display:inline;">
+                                @csrf
+                                @method('DELETE')
+                                <button class="btn secondary" type="submit">Archiver</button>
+                            </form>
+                        @endunless
+                    </td>
                 </tr>
             @endforeach
             </tbody>
         </table>
+        {{ $users->links() }}
     </div>
 @endsection

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'reprice-markets')</title>
+    <title>@yield('title', 'Agrigator')</title>
     <style>
         :root {
             --bg: #f4f6f8;
@@ -16,6 +16,8 @@
             --border: #d9e2ec;
             --danger: #9b1c1c;
             --warn: #8a6d3b;
+            --brand-agri: #111111;
+            --brand-gator: #0f6e56;
         }
         * { box-sizing: border-box; }
         body {
@@ -30,7 +32,9 @@
             display: flex; justify-content: space-between; align-items: center;
             gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
         }
-        .brand { font-size: 1.25rem; font-weight: 700; }
+        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--brand-agri); letter-spacing: .01em; }
+        .brand-name .brand-gator { color: var(--brand-gator); }
+        .brand-name .brand-suffix { color: var(--muted); font-weight: 700; font-size: .9em; }
         nav { display: flex; gap: .85rem; flex-wrap: wrap; align-items: center; }
         nav a { color: var(--muted); font-weight: 600; }
         nav a:hover, nav a.active { color: var(--accent); }
@@ -39,6 +43,16 @@
             border-radius: 12px; padding: 1rem; margin-bottom: 1rem;
         }
         .muted { color: var(--muted); }
+        .error {
+            background: #fde8e8; border: 1px solid #f5c2c2; color: var(--danger);
+            padding: .75rem .9rem; border-radius: 8px; margin-bottom: .9rem; font-weight: 600;
+        }
+        label { display: block; font-weight: 600; margin-bottom: .35rem; }
+        input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+            width: 100%; padding: .6rem .7rem; border: 1px solid var(--border);
+            border-radius: 8px; margin-bottom: .9rem; font: inherit; background: #fff; color: var(--text);
+        }
+        input[type="checkbox"], input[type="radio"] { width: auto; margin: 0; }
         .btn {
             display: inline-block; background: var(--accent); color: #fff; border: 0;
             border-radius: 8px; padding: .55rem .9rem; font-weight: 700; cursor: pointer;
@@ -65,6 +79,32 @@
             background: #fff; border-radius: 12px; padding: 1.25rem 1.5rem; width: min(420px, 92vw);
             box-shadow: 0 20px 50px rgba(0,0,0,.2);
         }
+        #toast-stack {
+            position: fixed; right: 1rem; bottom: 1rem; z-index: 1100;
+            display: flex; flex-direction: column; gap: .5rem; max-width: min(420px, calc(100vw - 2rem));
+        }
+        .toast {
+            background: #fff; border: 1px solid var(--border); border-left: 4px solid var(--accent);
+            border-radius: 10px; padding: .75rem .9rem; box-shadow: 0 12px 30px rgba(15,23,32,.12);
+            color: var(--text); font-weight: 600;
+        }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.success { border-left-color: #0f6e56; }
+        .toast.warn { border-left-color: var(--warn); }
+        .pagination { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: 1rem; align-items: center; }
+        .pagination > * { color: var(--muted); }
+        .pagination .page-link, .pagination a, .pagination span {
+            display: inline-block; padding: .35rem .6rem; border: 1px solid var(--border);
+            border-radius: 6px; color: var(--text); background: #fff;
+        }
+        .pagination .active span, .pagination [aria-current="page"] span {
+            border-color: var(--accent); color: #fff; background: var(--accent);
+        }
+        .filters { display:flex; gap:.6rem; flex-wrap:wrap; align-items:end; margin-bottom:.8rem; }
+        .filters label { display:block; font-size:.85rem; color:var(--muted); font-weight:600; margin:0 0 .25rem; }
+        .filters input, .filters select {
+            margin:0; padding:.5rem .65rem; border:1px solid var(--border); border-radius:8px; background:#fff;
+        }
     </style>
     @stack('styles')
 </head>
@@ -72,7 +112,7 @@
 <div class="shell">
     @auth
         <header class="appbar">
-            <div class="brand">reprice-markets</div>
+            <x-brand />
             <nav>
                 <a href="{{ route('prices.index') }}" class="{{ request()->routeIs('prices.*') ? 'active' : '' }}">Prix</a>
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Suivi</a>
@@ -101,6 +141,22 @@
         <div class="progress"><span id="ui-lock-bar"></span></div>
     </div>
 </div>
+<div id="toast-stack" aria-live="polite"></div>
+<script>
+window.showToast = function (message, type = 'error') {
+    const stack = document.getElementById('toast-stack');
+    if (!stack || !message) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + (type || 'error');
+    el.textContent = String(message);
+    stack.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity .25s ease';
+        setTimeout(() => el.remove(), 250);
+    }, 4200);
+};
+</script>
 @stack('scripts')
 </body>
 </html>

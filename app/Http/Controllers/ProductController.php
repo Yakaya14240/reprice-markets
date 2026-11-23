@@ -129,12 +129,19 @@ class ProductController extends Controller
                 'at' => $log->created_at?->toIso8601String(),
             ]);
 
+        $chartDefault = $priceColumns->firstWhere('is_chart_default', true)
+            ?? $priceColumns->first();
+
         return response()->json([
             'id' => $row,
             'sku' => $sku,
             'name' => (string) ($product[$nameCol] ?? ''),
+            'description' => $feed->productDescription($product, $headers),
+            'images' => $feed->productImages($product, $headers),
             'prices' => $prices,
             'history' => $history,
+            'chart_default_csv_column' => $chartDefault?->csv_column,
+            'chart_default_name' => $chartDefault?->name,
         ]);
     }
 
@@ -145,13 +152,57 @@ class ProductController extends Controller
             'new_price' => ['required', 'numeric', 'gt:0'],
         ]);
 
-        $exists = $feed->priceColumns()
-            ->where('csv_column', $data['csv_column'])
-            ->where('is_active', true)
-            ->exists();
+        $changes = $this->storePendingPrices($request, $feed, $row, [
+            [
+                'csv_column' => $data['csv_column'],
+                'new_price' => $data['new_price'],
+            ],
+        ]);
 
-        if (! $exists) {
-            return response()->json(['message' => 'Colonne prix invalide.'], 422);
+        if ($changes instanceof JsonResponse) {
+            return $changes;
+        }
+
+        return response()->json([
+            'pending' => $changes[0] ?? null,
+        ]);
+    }
+
+    public function updatePrices(Request $request, FeedFile $feed, int $row): JsonResponse
+    {
+        $data = $request->validate([
+            'prices' => ['required', 'array', 'min:1'],
+            'prices.*.csv_column' => ['required', 'string', 'max:255'],
+            'prices.*.new_price' => ['required', 'numeric', 'gt:0'],
+        ]);
+
+        $changes = $this->storePendingPrices($request, $feed, $row, $data['prices']);
+
+        if ($changes instanceof JsonResponse) {
+            return $changes;
+        }
+
+        return response()->json([
+            'pending' => $changes,
+            'count' => count($changes),
+        ]);
+    }
+
+    /**
+     * @param  list<array{csv_column: string, new_price: mixed}>  $items
+     * @return list<array{id: int, sku: string, csv_column: string, old_price: mixed, new_price: mixed}>|JsonResponse
+     */
+    private function storePendingPrices(Request $request, FeedFile $feed, int $row, array $items): array|JsonResponse
+    {
+        $allowedColumns = $feed->priceColumns()
+            ->where('is_active', true)
+            ->pluck('csv_column')
+            ->all();
+
+        foreach ($items as $item) {
+            if (! in_array($item['csv_column'], $allowedColumns, true)) {
+                return response()->json(['message' => 'Colonne prix invalide : '.$item['csv_column']], 422);
+            }
         }
 
         $loaded = $this->snapshots->loadProducts($feed);
@@ -167,30 +218,32 @@ class ProductController extends Controller
             ], 422);
         }
 
-        $old = $product[$data['csv_column']] ?? null;
+        $pending = [];
+        foreach ($items as $item) {
+            $old = $product[$item['csv_column']] ?? null;
+            $change = PendingPriceChange::query()->updateOrCreate(
+                [
+                    'user_id' => $request->user()->id,
+                    'feed_file_id' => $feed->id,
+                    'sku' => $sku,
+                    'csv_column' => $item['csv_column'],
+                ],
+                [
+                    'old_price' => is_numeric($old) ? $old : null,
+                    'new_price' => $item['new_price'],
+                ],
+            );
 
-        $change = PendingPriceChange::query()->updateOrCreate(
-            [
-                'user_id' => $request->user()->id,
-                'feed_file_id' => $feed->id,
-                'sku' => $sku,
-                'csv_column' => $data['csv_column'],
-            ],
-            [
-                'old_price' => is_numeric($old) ? $old : null,
-                'new_price' => $data['new_price'],
-            ],
-        );
-
-        return response()->json([
-            'pending' => [
+            $pending[] = [
                 'id' => $change->id,
                 'sku' => $change->sku,
                 'csv_column' => $change->csv_column,
                 'old_price' => $change->old_price,
                 'new_price' => $change->new_price,
-            ],
-        ]);
+            ];
+        }
+
+        return $pending;
     }
 
     public function refresh(FeedFile $feed): JsonResponse

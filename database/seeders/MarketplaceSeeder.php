@@ -4,11 +4,10 @@ namespace Database\Seeders;
 
 use App\Enums\FeedSourceType;
 use App\Enums\MarketplaceDriver;
-use App\Models\ChannelPriceMapping;
 use App\Models\Currency;
 use App\Models\FeedFile;
 use App\Models\Marketplace;
-use App\Models\MarketplaceShopPrice;
+use App\Models\MarketplacePriceMapping;
 use App\Models\PriceColumn;
 use Illuminate\Database\Seeder;
 
@@ -67,8 +66,6 @@ class MarketplaceSeeder extends Seeder
                 'driver' => MarketplaceDriver::Mirakl,
                 'api_url' => 'https://leclerc-prod.mirakl.net/api',
                 'shop_ids' => ['2861'],
-                'supports_channels' => false,
-                'supports_multi_shop' => false,
                 'is_active' => true,
             ],
         );
@@ -80,8 +77,6 @@ class MarketplaceSeeder extends Seeder
                 'driver' => MarketplaceDriver::Mirakl,
                 'api_url' => 'https://adeo-marketplace.mirakl.net/api',
                 'shop_ids' => ['2062'],
-                'supports_channels' => true,
-                'supports_multi_shop' => false,
                 'is_active' => true,
             ],
         );
@@ -93,8 +88,6 @@ class MarketplaceSeeder extends Seeder
                 'driver' => MarketplaceDriver::Mirakl,
                 'api_url' => 'https://marketplace.bricodepot.es/api',
                 'shop_ids' => ['2102', '2227'],
-                'supports_channels' => false,
-                'supports_multi_shop' => true,
                 'is_active' => true,
             ],
         );
@@ -106,16 +99,24 @@ class MarketplaceSeeder extends Seeder
                 'driver' => MarketplaceDriver::Kaufland,
                 'api_url' => 'https://sellerapi.kaufland.com/v2',
                 'shop_ids' => [],
-                'supports_channels' => false,
-                'supports_multi_shop' => false,
                 'is_active' => true,
             ],
         );
 
+        MarketplacePriceMapping::query()->updateOrCreate(
+            [
+                'marketplace_id' => $leclerc->id,
+                'shop_id' => '2861',
+                'channel_code' => '',
+            ],
+            ['price_column_id' => $priceColumns['FR']->id, 'channel_name' => null],
+        );
+
         foreach (['FR', 'IT', 'ES', 'DE', 'NL', 'PT'] as $channelCode) {
-            ChannelPriceMapping::query()->updateOrCreate(
+            MarketplacePriceMapping::query()->updateOrCreate(
                 [
                     'marketplace_id' => $leroymerlin->id,
+                    'shop_id' => '2062',
                     'channel_code' => $channelCode,
                 ],
                 [
@@ -125,17 +126,21 @@ class MarketplaceSeeder extends Seeder
             );
         }
 
-        MarketplaceShopPrice::query()->updateOrCreate(
-            ['marketplace_id' => $bricodepot->id, 'shop_id' => '2102'],
-            ['price_column_id' => $priceColumns['ES']->id],
+        MarketplacePriceMapping::query()->updateOrCreate(
+            [
+                'marketplace_id' => $bricodepot->id,
+                'shop_id' => '2102',
+                'channel_code' => '',
+            ],
+            ['price_column_id' => $priceColumns['ES']->id, 'channel_name' => null],
         );
-        MarketplaceShopPrice::query()->updateOrCreate(
-            ['marketplace_id' => $bricodepot->id, 'shop_id' => '2227'],
-            ['price_column_id' => $priceColumns['PT']->id],
-        );
-        MarketplaceShopPrice::query()->updateOrCreate(
-            ['marketplace_id' => $leclerc->id, 'shop_id' => '2861'],
-            ['price_column_id' => $priceColumns['FR']->id],
+        MarketplacePriceMapping::query()->updateOrCreate(
+            [
+                'marketplace_id' => $bricodepot->id,
+                'shop_id' => '2227',
+                'channel_code' => '',
+            ],
+            ['price_column_id' => $priceColumns['PT']->id, 'channel_name' => null],
         );
     }
 }

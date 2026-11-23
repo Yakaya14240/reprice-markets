@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'offers_count',
     'payload',
     'result_message',
+    'note',
     'started_at',
     'finished_at',
 ])]
