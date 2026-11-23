@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\FeedPublishLockException;
 use App\Jobs\PublishPendingChangesJob;
 use App\Models\FeedFile;
 use App\Models\PendingPriceChange;
+use App\Services\Publish\PendingConflictDetector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -55,16 +57,18 @@ class PublishController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function store(Request $request, FeedFile $feed): JsonResponse
+    public function store(Request $request, FeedFile $feed, PendingConflictDetector $conflictDetector): JsonResponse
     {
         $data = $request->validate([
             'marketplace_ids' => ['nullable', 'array'],
             'marketplace_ids.*' => ['integer', 'exists:marketplaces,id'],
             'note' => ['nullable', 'string', 'max:500'],
+            'confirm_conflicts' => ['sometimes', 'boolean'],
         ]);
 
         $marketplaceIds = array_values(array_map('intval', $data['marketplace_ids'] ?? []));
         $note = filled($data['note'] ?? null) ? trim((string) $data['note']) : null;
+        $confirmConflicts = (bool) ($data['confirm_conflicts'] ?? false);
 
         if (! $feed->hasWritableDestination()) {
             return response()->json([
@@ -103,6 +107,17 @@ class PublishController extends Controller
             return response()->json(['message' => 'Aucune modification en attente.'], 422);
         }
 
+        if (! $confirmConflicts) {
+            $conflicts = $conflictDetector->detect($request->user(), $feed);
+            if ($conflicts !== []) {
+                return response()->json([
+                    'code' => 'pending_conflicts',
+                    'message' => 'Des modifications en attente d’autres opérateurs chevauchent votre panier.',
+                    'conflicts' => $conflicts,
+                ], 409);
+            }
+        }
+
         Cache::put($lockKey, [
             'status' => 'running',
             'progress' => 1,
@@ -118,6 +133,24 @@ class PublishController extends Controller
                 $marketplaceIds,
                 $note,
             );
+        } catch (FeedPublishLockException $e) {
+            Cache::put($lockKey, [
+                'status' => 'failed',
+                'progress' => 100,
+                'label' => $e->getMessage(),
+                'feed_file_id' => $feed->id,
+            ], now()->addMinutes(10));
+
+            return response()->json([
+                'ok' => false,
+                'code' => 'feed_publish_lock',
+                'message' => $e->getMessage(),
+                'holder' => [
+                    'user_id' => $e->holderUserId,
+                    'name' => $e->holderName,
+                ],
+                'status' => Cache::get($lockKey),
+            ], 409);
         } catch (\Throwable $e) {
             $failed = Cache::get($lockKey);
             if (($failed['status'] ?? null) === 'running') {

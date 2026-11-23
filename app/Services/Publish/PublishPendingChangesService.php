@@ -5,6 +5,7 @@ namespace App\Services\Publish;
 use App\Domain\Offer\Offer;
 use App\Domain\Pricing\ZeroPriceGuard;
 use App\Enums\PushBatchStatus;
+use App\Exceptions\FeedPublishLockException;
 use App\Models\FeedFile;
 use App\Models\Marketplace;
 use App\Models\PendingPriceChange;
@@ -39,6 +40,28 @@ final class PublishPendingChangesService
     {
         $lockKey = "publish_lock_user_{$user->id}";
         $note = filled($note) ? trim($note) : null;
+        $feedLock = Cache::lock("publish_lock_feed_{$feed->id}", 600);
+
+        if (! $feedLock->get()) {
+            $holder = Cache::get("publish_feed_holder_{$feed->id}", []);
+            $holderName = isset($holder['name']) ? (string) $holder['name'] : null;
+            $holderUserId = isset($holder['user_id']) ? (int) $holder['user_id'] : null;
+            $message = $holderName
+                ? "Une publication est déjà en cours sur ce flux (par {$holderName})."
+                : 'Une publication est déjà en cours sur ce flux.';
+
+            throw new FeedPublishLockException(
+                message: $message,
+                holderUserId: $holderUserId,
+                holderName: $holderName,
+            );
+        }
+
+        Cache::put("publish_feed_holder_{$feed->id}", [
+            'user_id' => $user->id,
+            'name' => $user->name,
+            'started_at' => now()->toIso8601String(),
+        ], now()->addMinutes(10));
 
         try {
             $sync = $this->syncFeed($user, $feed, $marketplaceIds, $note);
@@ -149,6 +172,9 @@ final class PublishPendingChangesService
             ], now()->addMinutes(10));
 
             throw $e;
+        } finally {
+            Cache::forget("publish_feed_holder_{$feed->id}");
+            $feedLock->release();
         }
     }
 

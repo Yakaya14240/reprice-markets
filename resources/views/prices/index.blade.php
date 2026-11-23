@@ -162,17 +162,25 @@
     .history { max-height:220px; overflow:auto; margin-top:.4rem; }
     .history table { width:100%; border-collapse:collapse; font-size:.9rem; }
     .history th, .history td { border-bottom:1px solid var(--border); padding:.4rem; text-align:left; }
-    #price-chart-modal, #publish-modal {
+    #price-chart-modal, #publish-modal, #conflict-modal {
         display:none; position:fixed; inset:0; z-index:1200;
         background:rgba(15,23,32,.45); align-items:center; justify-content:center; padding:1rem;
     }
-    #price-chart-modal.open, #publish-modal.open { display:flex; }
-    #price-chart-modal .panel, #publish-modal .panel {
+    #price-chart-modal.open, #publish-modal.open, #conflict-modal.open { display:flex; }
+    #price-chart-modal .panel, #publish-modal .panel, #conflict-modal .panel {
         background:#fff; border-radius:12px; max-height:90vh; overflow:auto;
         padding:1.1rem 1.25rem 1.25rem; box-shadow:0 20px 50px rgba(0,0,0,.2);
     }
     #price-chart-modal .panel { width:min(720px,96vw); }
-    #publish-modal .panel { width:min(480px,96vw); }
+    #publish-modal .panel, #conflict-modal .panel { width:min(520px,96vw); }
+    #conflict-modal .conflict-list {
+        list-style:none; margin:.75rem 0 0; padding:0; max-height:240px; overflow:auto;
+        border:1px solid var(--border); border-radius:8px;
+    }
+    #conflict-modal .conflict-list li {
+        padding:.55rem .75rem; border-bottom:1px solid var(--border); font-size:.9rem;
+    }
+    #conflict-modal .conflict-list li:last-child { border-bottom:0; }
     #price-chart-modal .panel-head {
         display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:.85rem;
     }
@@ -185,12 +193,12 @@
     }
     #price-chart-svg-wrap svg { width:100%; height:240px; display:block; }
     #price-chart-empty { display:none; color:var(--muted); padding:2rem 1rem; text-align:center; }
-    #publish-modal .panel h3 { margin:0 0 .35rem; }
+    #publish-modal .panel h3, #conflict-modal .panel h3 { margin:0 0 .35rem; }
     #publish-modal textarea {
         width:100%; min-height:88px; resize:vertical; margin:0;
         font:inherit; padding:.65rem .75rem; border:1px solid var(--border); border-radius:8px;
     }
-    #publish-modal .panel-actions {
+    #publish-modal .panel-actions, #conflict-modal .panel-actions {
         display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap; margin-top:1rem;
     }
 </style>
@@ -320,6 +328,18 @@
             </div>
         </div>
 
+        <div id="conflict-modal" role="dialog" aria-modal="true" aria-labelledby="conflict-modal-title">
+            <div class="panel">
+                <h3 id="conflict-modal-title">Conflits avec d’autres opérateurs</h3>
+                <p class="muted" style="margin:0;">Des collègues ont aussi des modifications en attente sur les mêmes produits. Publier écrasera leur prix sur le flux pour ces lignes.</p>
+                <ul class="conflict-list" id="conflict-modal-list"></ul>
+                <div class="panel-actions">
+                    <button class="btn secondary" type="button" id="conflict-modal-cancel">Annuler</button>
+                    <button class="btn" type="button" id="conflict-modal-confirm">Publier quand même</button>
+                </div>
+            </div>
+        </div>
+
         <div id="price-chart-modal" role="dialog" aria-modal="true" aria-labelledby="price-chart-title">
             <div class="panel">
                 <div class="panel-head">
@@ -386,6 +406,8 @@
     const publishModal = document.getElementById('publish-modal');
     const publishNoteInput = document.getElementById('publish-note');
     const publishModalSummary = document.getElementById('publish-modal-summary');
+    const conflictModal = document.getElementById('conflict-modal');
+    const conflictModalList = document.getElementById('conflict-modal-list');
     const canWrite = @json($canWrite);
 
     let offset = 0;
@@ -395,6 +417,7 @@
     let activeProductData = null;
     let carouselIndex = 0;
     let searchTimer = null;
+    let pendingPublishNote = '';
 
     const api = (url, options = {}) => fetch(url, {
         headers: {
@@ -406,7 +429,10 @@
     }).then(async r => {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
-            throw new Error(data.message || data.error || `Erreur application HTTP ${r.status} (${url})`);
+            const err = new Error(data.message || data.error || `Erreur application HTTP ${r.status} (${url})`);
+            err.status = r.status;
+            err.payload = data;
+            throw err;
         }
         return data;
     });
@@ -884,14 +910,35 @@
         publishModal?.classList.remove('open');
     }
 
-    async function publish(note = null) {
+    function openConflictModal(conflicts) {
+        if (!conflictModalList) return;
+        const rows = (conflicts || []).map((c) => {
+            const label = escapeHtml(c.csv_column);
+            const who = escapeHtml(c.other_user_name || 'Collègue');
+            const sku = escapeHtml(c.sku);
+            const mine = escapeHtml(c.my_new_price);
+            const theirs = escapeHtml(c.other_new_price);
+            return `<li><strong>${sku}</strong> · ${label}<br><span class="muted">${who} → ${theirs} · vous → ${mine}</span></li>`;
+        });
+        conflictModalList.innerHTML = rows.join('') || '<li class="muted">Conflits détectés.</li>';
+        conflictModal?.classList.add('open');
+    }
+
+    function closeConflictModal() {
+        conflictModal?.classList.remove('open');
+    }
+
+    async function publish(note = null, confirmConflicts = false) {
         const marketplaceIds = selectedMarketplaces();
         closePublishModal();
+        closeConflictModal();
+        pendingPublishNote = String(note ?? '');
         setUiLock(true, marketplaceIds.length ? 'Démarrage sync flux…' : 'Sync CSV uniquement…', 2);
         try {
             const payload = { marketplace_ids: marketplaceIds };
-            const trimmed = String(note ?? '').trim();
+            const trimmed = pendingPublishNote.trim();
             if (trimmed !== '') payload.note = trimmed.slice(0, 500);
+            if (confirmConflicts) payload.confirm_conflicts = true;
             const result = await api(endpoints.publish, { method: 'POST', body: JSON.stringify(payload) });
             const status = result.status || await api(endpoints.publishStatus);
             const label = status.label || result.message || 'Terminé';
@@ -901,8 +948,17 @@
             const delay = status.status === 'partial' ? 1800 : 700;
             setTimeout(() => setUiLock(false), delay);
         } catch (e) {
+            const code = e.payload?.code;
+            if (code === 'pending_conflicts') {
+                setUiLock(false);
+                openConflictModal(e.payload.conflicts || []);
+                return;
+            }
             setUiLock(true, e.message, 100);
             setTimeout(() => setUiLock(false), 1800);
+            if (code === 'feed_publish_lock') {
+                showToast(e.message || 'Une publication est déjà en cours sur ce flux.', 'warn');
+            }
         }
     }
 
@@ -933,6 +989,9 @@
     document.getElementById('publish-modal-cancel')?.addEventListener('click', closePublishModal);
     document.getElementById('publish-modal-confirm')?.addEventListener('click', () => publish(publishNoteInput?.value || ''));
     publishModal?.addEventListener('click', (event) => { if (event.target === publishModal) closePublishModal(); });
+    document.getElementById('conflict-modal-cancel')?.addEventListener('click', closeConflictModal);
+    document.getElementById('conflict-modal-confirm')?.addEventListener('click', () => publish(pendingPublishNote, true));
+    conflictModal?.addEventListener('click', (event) => { if (event.target === conflictModal) closeConflictModal(); });
     document.getElementById('mkp-all').addEventListener('click', () => {
         document.querySelectorAll('.mkp-check').forEach(el => el.checked = true);
     });
@@ -949,6 +1008,7 @@
     chartModal?.addEventListener('click', (event) => { if (event.target === chartModal) closePriceChartModal(); });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
+        if (conflictModal?.classList.contains('open')) { closeConflictModal(); return; }
         if (publishModal?.classList.contains('open')) { closePublishModal(); return; }
         if (chartModal?.classList.contains('open')) { closePriceChartModal(); return; }
         if (pendingQueue?.classList.contains('open')) { closePendingQueue(); return; }
