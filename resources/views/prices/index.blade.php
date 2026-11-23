@@ -148,6 +148,29 @@
         background:var(--accent-soft); color:#03543f; font-size:.7rem; font-weight:700;
         vertical-align:middle;
     }
+    .badge-colleague {
+        display:inline-block; margin-left:.35rem; padding:.1rem .4rem; border-radius:999px;
+        background:#fff7ed; color:#9a3412; font-size:.7rem; font-weight:700;
+        vertical-align:middle;
+    }
+    .colleague-hint {
+        margin:.35rem 0 0; font-size:.8rem; color:#9a3412; line-height:1.35;
+    }
+    .price-table tr.has-colleague { background:#fff7ed; }
+    .pending-others {
+        margin-top:.85rem; padding-top:.75rem; border-top:1px solid var(--border);
+    }
+    .pending-others-list {
+        list-style:none; margin:.35rem 0 0; padding:0; max-height:180px; overflow:auto;
+    }
+    .pending-others-list li {
+        padding:.45rem 0; border-bottom:1px solid var(--border); font-size:.88rem;
+        display:flex; justify-content:space-between; gap:.5rem; align-items:flex-start;
+    }
+    .pending-others-list li:last-child { border-bottom:0; }
+    .pending-chip-others {
+        background:#fff7ed; color:#9a3412; border:1px solid #fdba74;
+    }
     .detail-actions { display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end; margin:.35rem 0 1rem; }
     .history-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:1rem 0 .35rem; }
     .history-head h3 { margin:0; }
@@ -264,6 +287,12 @@
                     @endforelse
                 </ul>
 
+                <div class="pending-others" id="pending-others" hidden>
+                    <div class="pending-queue-section-title">Chez les collègues</div>
+                    <p class="muted pending-queue-hint">Lecture seule — déjà en file chez d’autres opérateurs.</p>
+                    <ul class="pending-others-list" id="pending-others-list"></ul>
+                </div>
+
                 <div>
                     <div class="pending-queue-section-title">Marketplaces</div>
                     <p class="muted pending-queue-hint">Aucune cochée = sync CSV uniquement.</p>
@@ -331,11 +360,11 @@
         <div id="conflict-modal" role="dialog" aria-modal="true" aria-labelledby="conflict-modal-title">
             <div class="panel">
                 <h3 id="conflict-modal-title">Conflits avec d’autres opérateurs</h3>
-                <p class="muted" style="margin:0;">Des collègues ont aussi des modifications en attente sur les mêmes produits. Publier écrasera leur prix sur le flux pour ces lignes.</p>
+                <p class="muted" id="conflict-modal-hint" style="margin:0;">Des collègues ont aussi des modifications en attente sur les mêmes produits.</p>
                 <ul class="conflict-list" id="conflict-modal-list"></ul>
                 <div class="panel-actions">
                     <button class="btn secondary" type="button" id="conflict-modal-cancel">Annuler</button>
-                    <button class="btn" type="button" id="conflict-modal-confirm">Publier quand même</button>
+                    <button class="btn" type="button" id="conflict-modal-confirm">Continuer quand même</button>
                 </div>
             </div>
         </div>
@@ -407,7 +436,12 @@
     const publishNoteInput = document.getElementById('publish-note');
     const publishModalSummary = document.getElementById('publish-modal-summary');
     const conflictModal = document.getElementById('conflict-modal');
+    const conflictModalTitle = document.getElementById('conflict-modal-title');
+    const conflictModalHint = document.getElementById('conflict-modal-hint');
     const conflictModalList = document.getElementById('conflict-modal-list');
+    const conflictModalConfirm = document.getElementById('conflict-modal-confirm');
+    const pendingOthersWrap = document.getElementById('pending-others');
+    const pendingOthersList = document.getElementById('pending-others-list');
     const canWrite = @json($canWrite);
 
     let offset = 0;
@@ -418,6 +452,12 @@
     let carouselIndex = 0;
     let searchTimer = null;
     let pendingPublishNote = '';
+    let conflictMode = 'publish';
+    let pendingSaveContext = null;
+    let colleaguePollTimer = null;
+    let colleaguePollInFlight = false;
+    let lastOthersFingerprint = '';
+    const COLLEAGUE_POLL_MS = 10000;
 
     const api = (url, options = {}) => fetch(url, {
         headers: {
@@ -525,6 +565,7 @@
     async function resetAndLoad() {
         await pollFeedStatus();
         await loadMore(true);
+        await refreshPending();
     }
 
     async function openProduct(rowId) {
@@ -625,6 +666,8 @@
 
             prices.forEach(price => {
                 const hasPending = price.pending_price !== null && price.pending_price !== undefined && price.pending_price !== '';
+                const others = Array.isArray(price.others_pending) ? price.others_pending : [];
+                const hasColleague = others.length > 0;
                 const baseline = hasPending ? price.pending_price : price.current_price;
                 const baselineStr = baseline === null || baseline === undefined ? '' : String(baseline);
                 const symbol = price.currency_symbol || price.currency_code || '';
@@ -633,6 +676,7 @@
 
                 const row = document.createElement('tr');
                 if (hasPending) row.classList.add('is-pending');
+                if (hasColleague) row.classList.add('has-colleague');
                 row.dataset.csvColumn = price.csv_column;
                 row.innerHTML = `
                     <td>
@@ -645,9 +689,11 @@
                             <input type="number" step="0.01" min="0.01" value="${escapeHtml(baselineStr)}" data-baseline="${escapeHtml(baselineStr)}" aria-label="Nouveau prix ${escapeHtml(marketLabel)}">
                             ${symbol ? `<span class="currency-affix">${escapeHtml(symbol)}</span>` : ''}
                         </div>
+                        <div class="colleague-hint" hidden></div>
                         <div class="row-error" data-price-error></div>
                     </td>
                 `;
+                applyColleaguePendingToRow(row, others);
                 const input = row.querySelector('input');
                 const errorEl = row.querySelector('[data-price-error]');
                 const syncDirty = () => {
@@ -680,42 +726,63 @@
         dots.innerHTML = Array.from({ length: total }, (_, i) => `<span class="${i === carouselIndex ? 'on' : ''}"></span>`).join('');
     }
 
-    async function validateAllPrices(rowId, grid, validateBtn) {
+    async function validateAllPrices(rowId, grid, validateBtn, confirmConflicts = false) {
         const dirtyRows = [...grid.querySelectorAll('tr.is-dirty')];
-        if (!dirtyRows.length) return;
+        if (!dirtyRows.length && !confirmConflicts) return;
 
-        const prices = [];
-        for (const row of dirtyRows) {
-            const input = row.querySelector('input');
-            const errorEl = row.querySelector('[data-price-error]');
-            const raw = String(input.value ?? '').trim();
-            const parsed = Number(raw);
-            if (raw === '' || Number.isNaN(parsed) || parsed < 0.01) {
-                errorEl.textContent = 'Indiquez un prix ≥ 0,01.';
-                errorEl.style.display = 'block';
-                input.style.borderColor = 'var(--danger)';
-                input.focus();
-                return;
+        let prices = [];
+        if (confirmConflicts && pendingSaveContext?.prices) {
+            prices = pendingSaveContext.prices;
+            rowId = pendingSaveContext.rowId;
+            grid = pendingSaveContext.grid || grid;
+            validateBtn = pendingSaveContext.validateBtn || validateBtn;
+        } else {
+            for (const row of dirtyRows) {
+                const input = row.querySelector('input');
+                const errorEl = row.querySelector('[data-price-error]');
+                const raw = String(input.value ?? '').trim();
+                const parsed = Number(raw);
+                if (raw === '' || Number.isNaN(parsed) || parsed < 0.01) {
+                    errorEl.textContent = 'Indiquez un prix ≥ 0,01.';
+                    errorEl.style.display = 'block';
+                    input.style.borderColor = 'var(--danger)';
+                    input.focus();
+                    return;
+                }
+                prices.push({ csv_column: row.dataset.csvColumn, new_price: raw });
             }
-            prices.push({ csv_column: row.dataset.csvColumn, new_price: raw });
         }
+
+        if (!prices.length) return;
 
         validateBtn.disabled = true;
         const previous = validateBtn.textContent;
         validateBtn.textContent = 'Validation…';
         try {
+            const payload = { prices };
+            if (confirmConflicts) payload.confirm_conflicts = true;
             await api(endpoints.pricesBatch(rowId), {
                 method: 'POST',
-                body: JSON.stringify({ prices }),
+                body: JSON.stringify(payload),
             });
+            pendingSaveContext = null;
             await refreshPending();
             showToast(`${prices.length} prix mis en attente.`, 'success');
             setDetailMode(false);
         } catch (e) {
+            if (e.payload?.code === 'pending_conflicts') {
+                pendingSaveContext = { rowId, grid, validateBtn, prices };
+                validateBtn.disabled = false;
+                validateBtn.textContent = previous;
+                openConflictModal(e.payload.conflicts || [], 'save');
+                return;
+            }
             showToast(e.message, 'error');
             validateBtn.disabled = false;
         } finally {
-            validateBtn.textContent = previous;
+            if (validateBtn.textContent === 'Validation…') {
+                validateBtn.textContent = previous;
+            }
         }
     }
 
@@ -736,8 +803,8 @@
         }
     }
 
-    function renderPendingChips(items) {
-        if (!items.length) {
+    function renderPendingChips(items, othersCount = 0) {
+        if (!items.length && othersCount < 1) {
             pendingChips.innerHTML = '<span class="muted" id="pending-empty">Aucune modification.</span>';
             return;
         }
@@ -747,7 +814,13 @@
         const more = items.length > 2
             ? `<span class="pending-chip pending-chip-more">+${items.length - 2}</span>`
             : '';
-        pendingChips.innerHTML = visible + more;
+        const othersChip = othersCount > 0
+            ? `<span class="pending-chip pending-chip-others">${othersCount} chez collègues</span>`
+            : '';
+        const emptyMine = !items.length
+            ? '<span class="muted" id="pending-empty">Aucune modification.</span>'
+            : '';
+        pendingChips.innerHTML = emptyMine + visible + more + othersChip;
     }
 
     function renderPendingList(items) {
@@ -767,15 +840,135 @@
         `).join('');
     }
 
-    async function refreshPending() {
-        const data = await api(endpoints.pending);
-        const items = data.pending || [];
-        pendingCount.textContent = String(items.length);
-        renderPendingChips(items);
-        renderPendingList(items);
-        syncPublishButtons(items.length);
+    function renderOthersPending(items) {
+        if (!pendingOthersWrap || !pendingOthersList) return;
         if (!items.length) {
-            closePendingQueue();
+            pendingOthersWrap.hidden = true;
+            pendingOthersList.innerHTML = '';
+            return;
+        }
+        pendingOthersWrap.hidden = false;
+        pendingOthersList.innerHTML = items.map(i => `
+            <li>
+                <span>
+                    <strong>${escapeHtml(i.sku)}</strong>
+                    · ${escapeHtml(marketLabel(i))}
+                    · ${escapeHtml(i.old_price ?? '—')} → <strong>${escapeHtml(i.new_price)}</strong>
+                    <div class="muted" style="font-size:.8rem;">${escapeHtml(i.user_name)}</div>
+                </span>
+            </li>
+        `).join('');
+    }
+
+    function othersFingerprint(others) {
+        return (others || [])
+            .map(o => `${o.id}:${o.user_id}:${o.csv_column}:${o.new_price}:${o.updated_at || ''}`)
+            .sort()
+            .join('|');
+    }
+
+    function applyColleaguePendingToRow(row, others) {
+        const list = Array.isArray(others) ? others : [];
+        const hasColleague = list.length > 0;
+        row.classList.toggle('has-colleague', hasColleague);
+
+        const nameEl = row.querySelector('.market-name');
+        if (nameEl) {
+            nameEl.querySelectorAll('.badge-colleague').forEach(el => el.remove());
+            list.forEach(o => {
+                const badge = document.createElement('span');
+                badge.className = 'badge-colleague';
+                badge.title = `En attente chez ${o.user_name}`;
+                badge.textContent = `${o.user_name} → ${o.new_price}`;
+                nameEl.appendChild(badge);
+            });
+        }
+
+        const hintEl = row.querySelector('.colleague-hint');
+        if (hintEl) {
+            if (!hasColleague) {
+                hintEl.hidden = true;
+                hintEl.textContent = '';
+            } else {
+                hintEl.hidden = false;
+                hintEl.textContent = list.map(o => `${o.user_name} a ${o.new_price} en attente`).join(' · ');
+            }
+        }
+    }
+
+    async function patchOpenProductColleagues() {
+        if (activeRowId === null) return;
+        const grid = document.getElementById('price-grid');
+        if (!grid) return;
+        try {
+            const data = await api(endpoints.product(activeRowId));
+            const prices = data.prices || [];
+            prices.forEach(price => {
+                const row = [...grid.querySelectorAll('tr[data-csv-column]')]
+                    .find(tr => tr.dataset.csvColumn === price.csv_column);
+                if (!row) return;
+                applyColleaguePendingToRow(row, price.others_pending || []);
+            });
+        } catch (_) {
+            // Ignore transient product poll errors.
+        }
+    }
+
+    async function refreshPending({ quiet = false, syncOpenProduct = true } = {}) {
+        try {
+            const data = await api(endpoints.pending);
+            const items = data.pending || [];
+            const others = data.others || [];
+            const fingerprint = othersFingerprint(others);
+            const othersChanged = fingerprint !== lastOthersFingerprint;
+            lastOthersFingerprint = fingerprint;
+
+            pendingCount.textContent = String(items.length);
+            renderPendingChips(items, others.length);
+            renderPendingList(items);
+            renderOthersPending(others);
+            syncPublishButtons(items.length);
+            if (!items.length && !others.length) {
+                closePendingQueue();
+            }
+            if (syncOpenProduct && othersChanged && activeRowId !== null) {
+                await patchOpenProductColleagues();
+            }
+            return data;
+        } catch (e) {
+            if (!quiet) throw e;
+            return null;
+        }
+    }
+
+    function shouldPauseColleaguePolling() {
+        return document.hidden
+            || lock?.classList.contains('active')
+            || conflictModal?.classList.contains('open')
+            || publishModal?.classList.contains('open');
+    }
+
+    async function pollColleagueAwareness() {
+        if (colleaguePollInFlight || shouldPauseColleaguePolling()) return;
+        colleaguePollInFlight = true;
+        try {
+            await refreshPending({ quiet: true, syncOpenProduct: true });
+        } finally {
+            colleaguePollInFlight = false;
+        }
+    }
+
+    function startColleaguePolling() {
+        stopColleaguePolling();
+        colleaguePollTimer = window.setInterval(() => {
+            pollColleagueAwareness();
+        }, COLLEAGUE_POLL_MS);
+    }
+
+    function stopColleaguePolling() {
+        if (colleaguePollTimer !== null) {
+            clearInterval(colleaguePollTimer);
+            colleaguePollTimer = null;
         }
     }
 
@@ -910,8 +1103,22 @@
         publishModal?.classList.remove('open');
     }
 
-    function openConflictModal(conflicts) {
+    function openConflictModal(conflicts, mode = 'publish') {
         if (!conflictModalList) return;
+        conflictMode = mode;
+        if (conflictModalTitle) {
+            conflictModalTitle.textContent = mode === 'save'
+                ? 'Modifications déjà en attente chez un collègue'
+                : 'Conflits avec d’autres opérateurs';
+        }
+        if (conflictModalHint) {
+            conflictModalHint.textContent = mode === 'save'
+                ? 'Un collègue a déjà ces prix en file. Continuer ajoutera aussi vos valeurs dans votre panier (last-write-wins à la publication).'
+                : 'Des collègues ont aussi des modifications en attente sur les mêmes produits. Publier écrasera leur prix sur le flux pour ces lignes.';
+        }
+        if (conflictModalConfirm) {
+            conflictModalConfirm.textContent = mode === 'save' ? 'Mettre en attente quand même' : 'Publier quand même';
+        }
         const rows = (conflicts || []).map((c) => {
             const label = escapeHtml(c.csv_column);
             const who = escapeHtml(c.other_user_name || 'Collègue');
@@ -926,6 +1133,9 @@
 
     function closeConflictModal() {
         conflictModal?.classList.remove('open');
+        if (conflictMode === 'save' && pendingSaveContext?.validateBtn) {
+            pendingSaveContext.validateBtn.disabled = false;
+        }
     }
 
     async function publish(note = null, confirmConflicts = false) {
@@ -951,7 +1161,7 @@
             const code = e.payload?.code;
             if (code === 'pending_conflicts') {
                 setUiLock(false);
-                openConflictModal(e.payload.conflicts || []);
+                openConflictModal(e.payload.conflicts || [], 'publish');
                 return;
             }
             setUiLock(true, e.message, 100);
@@ -990,7 +1200,16 @@
     document.getElementById('publish-modal-confirm')?.addEventListener('click', () => publish(publishNoteInput?.value || ''));
     publishModal?.addEventListener('click', (event) => { if (event.target === publishModal) closePublishModal(); });
     document.getElementById('conflict-modal-cancel')?.addEventListener('click', closeConflictModal);
-    document.getElementById('conflict-modal-confirm')?.addEventListener('click', () => publish(pendingPublishNote, true));
+    conflictModalConfirm?.addEventListener('click', () => {
+        closeConflictModal();
+        if (conflictMode === 'save') {
+            const ctx = pendingSaveContext;
+            if (!ctx) return;
+            validateAllPrices(ctx.rowId, ctx.grid, ctx.validateBtn, true);
+            return;
+        }
+        publish(pendingPublishNote, true);
+    });
     conflictModal?.addEventListener('click', (event) => { if (event.target === conflictModal) closeConflictModal(); });
     document.getElementById('mkp-all').addEventListener('click', () => {
         document.querySelectorAll('.mkp-check').forEach(el => el.checked = true);
@@ -1014,18 +1233,25 @@
         if (pendingQueue?.classList.contains('open')) { closePendingQueue(); return; }
         if (layoutEl.classList.contains('is-detail')) setDetailMode(false);
     });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) pollColleagueAwareness();
+    });
 
     (async () => {
-        if (bootRefresh) {
-            setLoadProgress(5, 'Mise à jour des infos à la connexion…');
-            const ready = await waitUntilReady();
-            if (!ready) { await refreshFeed(); return; }
-            await resetAndLoad();
-            return;
+        try {
+            if (bootRefresh) {
+                setLoadProgress(5, 'Mise à jour des infos à la connexion…');
+                const ready = await waitUntilReady();
+                if (!ready) await refreshFeed();
+                else await resetAndLoad();
+            } else {
+                const s = await pollFeedStatus();
+                if (s.status !== 'ready') await refreshFeed();
+                else await resetAndLoad();
+            }
+        } finally {
+            startColleaguePolling();
         }
-        const s = await pollFeedStatus();
-        if (s.status !== 'ready') await refreshFeed();
-        else await resetAndLoad();
     })();
 })();
 </script>

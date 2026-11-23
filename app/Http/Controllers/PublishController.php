@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Cache;
 
 class PublishController extends Controller
 {
-    public function pending(Request $request, FeedFile $feed): JsonResponse
+    public function pending(Request $request, FeedFile $feed, PendingConflictDetector $conflictDetector): JsonResponse
     {
         $columnLabels = $feed->priceColumns()
             ->get(['csv_column', 'name', 'alias'])
@@ -42,8 +42,17 @@ class PublishController extends Controller
                 'new_price' => $c->new_price,
             ]);
 
+        $others = collect($conflictDetector->othersForFeed($request->user(), $feed))
+            ->map(fn (array $change) => [
+                ...$change,
+                'market_label' => $columnLabels[$change['csv_column']] ?? $change['csv_column'],
+            ])
+            ->values()
+            ->all();
+
         return response()->json([
             'pending' => $items,
+            'others' => $others,
             'write_destination' => $feed->writeDestinationLabel(),
             'can_write' => $feed->hasWritableDestination(),
         ]);

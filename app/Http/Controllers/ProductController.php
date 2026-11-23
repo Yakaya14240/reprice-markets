@@ -7,12 +7,16 @@ use App\Models\FeedFile;
 use App\Models\PendingPriceChange;
 use App\Models\PriceChangeLog;
 use App\Services\Feed\FeedSnapshotService;
+use App\Services\Publish\PendingConflictDetector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function __construct(private readonly FeedSnapshotService $snapshots) {}
+    public function __construct(
+        private readonly FeedSnapshotService $snapshots,
+        private readonly PendingConflictDetector $conflictDetector,
+    ) {}
 
     public function index(Request $request, FeedFile $feed): JsonResponse
     {
@@ -98,9 +102,20 @@ class ProductController extends Controller
             ->get()
             ->keyBy('csv_column');
 
-        $prices = $priceColumns->map(function ($column) use ($product, $pending) {
+        $othersByColumn = collect($this->conflictDetector->othersForSku($request->user(), $feed, $sku))
+            ->groupBy('csv_column');
+
+        $prices = $priceColumns->map(function ($column) use ($product, $pending, $othersByColumn) {
             $current = $product[$column->csv_column] ?? null;
             $pendingChange = $pending->get($column->csv_column);
+            $others = ($othersByColumn->get($column->csv_column) ?? collect())
+                ->map(fn (array $change) => [
+                    'user_id' => $change['user_id'],
+                    'user_name' => $change['user_name'],
+                    'new_price' => $change['new_price'],
+                ])
+                ->values()
+                ->all();
 
             return [
                 'id' => $column->id,
@@ -111,6 +126,7 @@ class ProductController extends Controller
                 'currency_symbol' => $column->currency?->symbol,
                 'current_price' => $current,
                 'pending_price' => $pendingChange?->new_price,
+                'others_pending' => $others,
             ];
         });
 
@@ -150,14 +166,21 @@ class ProductController extends Controller
         $data = $request->validate([
             'csv_column' => ['required', 'string', 'max:255'],
             'new_price' => ['required', 'numeric', 'gt:0'],
+            'confirm_conflicts' => ['sometimes', 'boolean'],
         ]);
 
-        $changes = $this->storePendingPrices($request, $feed, $row, [
+        $changes = $this->storePendingPrices(
+            $request,
+            $feed,
+            $row,
             [
-                'csv_column' => $data['csv_column'],
-                'new_price' => $data['new_price'],
+                [
+                    'csv_column' => $data['csv_column'],
+                    'new_price' => $data['new_price'],
+                ],
             ],
-        ]);
+            (bool) ($data['confirm_conflicts'] ?? false),
+        );
 
         if ($changes instanceof JsonResponse) {
             return $changes;
@@ -174,9 +197,16 @@ class ProductController extends Controller
             'prices' => ['required', 'array', 'min:1'],
             'prices.*.csv_column' => ['required', 'string', 'max:255'],
             'prices.*.new_price' => ['required', 'numeric', 'gt:0'],
+            'confirm_conflicts' => ['sometimes', 'boolean'],
         ]);
 
-        $changes = $this->storePendingPrices($request, $feed, $row, $data['prices']);
+        $changes = $this->storePendingPrices(
+            $request,
+            $feed,
+            $row,
+            $data['prices'],
+            (bool) ($data['confirm_conflicts'] ?? false),
+        );
 
         if ($changes instanceof JsonResponse) {
             return $changes;
@@ -192,8 +222,13 @@ class ProductController extends Controller
      * @param  list<array{csv_column: string, new_price: mixed}>  $items
      * @return list<array{id: int, sku: string, csv_column: string, old_price: mixed, new_price: mixed}>|JsonResponse
      */
-    private function storePendingPrices(Request $request, FeedFile $feed, int $row, array $items): array|JsonResponse
-    {
+    private function storePendingPrices(
+        Request $request,
+        FeedFile $feed,
+        int $row,
+        array $items,
+        bool $confirmConflicts = false,
+    ): array|JsonResponse {
         $allowedColumns = $feed->priceColumns()
             ->where('is_active', true)
             ->pluck('csv_column')
@@ -216,6 +251,17 @@ class ProductController extends Controller
             return response()->json([
                 'message' => 'Impossible de déterminer le SKU du produit. Vérifiez la colonne SKU du flux en admin (ex. Identifiant_unique).',
             ], 422);
+        }
+
+        if (! $confirmConflicts) {
+            $conflicts = $this->conflictDetector->detectForProposed($request->user(), $feed, $sku, $items);
+            if ($conflicts !== []) {
+                return response()->json([
+                    'code' => 'pending_conflicts',
+                    'message' => 'Des collègues ont déjà des modifications en attente sur ces prix.',
+                    'conflicts' => $conflicts,
+                ], 409);
+            }
         }
 
         $pending = [];
