@@ -217,7 +217,7 @@
                         <td class="muted-cell">{{ $batch->created_at?->format('d/m/Y H:i') }}</td>
                         <td>
                             <div class="mkp-cell">
-                                <span>{{ $batch->marketplace?->name }}</span>
+                                <span>{{ $batch->marketplaceDisplayName() }}</span>
                                 @if (filled($batch->note))
                                     <button
                                         type="button"

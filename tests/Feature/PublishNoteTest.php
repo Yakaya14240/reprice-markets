@@ -94,6 +94,7 @@ class PublishNoteTest extends TestCase
             'offers_count' => 1,
             'result_message' => 'Flux sync OK',
             'note' => 'Correction erreur prix IT',
+            'payload' => ['marketplace_ids' => [$marketplace->id]],
             'finished_at' => now(),
         ]);
 
@@ -103,6 +104,35 @@ class PublishNoteTest extends TestCase
             ->assertSee('Alpha Note', false)
             ->assertSee('title="Correction erreur prix IT"', false)
             ->assertSee('Note de publication', false);
+    }
+
+    public function test_suivi_shows_csv_only_label_when_no_marketplace_was_pushed(): void
+    {
+        $user = User::factory()->admin()->create(['name' => 'Admin CSV']);
+        $marketplace = Marketplace::query()->create([
+            'name' => 'Brico Depot',
+            'slug' => 'brico-csv-only',
+            'driver' => MarketplaceDriver::Mirakl,
+            'api_url' => 'https://brico-csv.test/api',
+            'shop_ids' => ['1'],
+            'is_active' => true,
+        ]);
+
+        PricePushBatch::query()->create([
+            'user_id' => $user->id,
+            'marketplace_id' => $marketplace->id,
+            'status' => 'succeeded',
+            'offers_count' => 0,
+            'result_message' => 'Flux synchronisé vers SFTP → test/file.csv.',
+            'payload' => ['marketplace_ids' => []],
+            'finished_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Sync CSV uniquement', false)
+            ->assertSee('<span>Sync CSV uniquement</span>', false);
     }
 
     public function test_publish_rejects_note_longer_than_500_chars(): void

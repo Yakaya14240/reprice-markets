@@ -45,4 +45,18 @@ class PricePushBatch extends Model
     {
         return $this->belongsTo(FeedFile::class);
     }
+
+    /**
+     * Label for Suivi: CSV-only publishes must not look like a marketplace API push.
+     */
+    public function marketplaceDisplayName(): string
+    {
+        $marketplaceIds = $this->payload['marketplace_ids'] ?? null;
+
+        if (is_array($marketplaceIds) && $marketplaceIds === []) {
+            return 'Sync CSV uniquement';
+        }
+
+        return $this->marketplace?->name ?? '—';
+    }
 }
