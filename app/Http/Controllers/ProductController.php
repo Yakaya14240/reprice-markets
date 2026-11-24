@@ -105,8 +105,8 @@ class ProductController extends Controller
         $othersByColumn = collect($this->conflictDetector->othersForSku($request->user(), $feed, $sku))
             ->groupBy('csv_column');
 
-        $prices = $priceColumns->map(function ($column) use ($product, $pending, $othersByColumn) {
-            $current = $product[$column->csv_column] ?? null;
+        $prices = $priceColumns->map(function ($column) use ($product, $pending, $othersByColumn, $feed) {
+            $currentRaw = $product[$column->csv_column] ?? null;
             $pendingChange = $pending->get($column->csv_column);
             $others = ($othersByColumn->get($column->csv_column) ?? collect())
                 ->map(fn (array $change) => [
@@ -124,7 +124,8 @@ class ProductController extends Controller
                 'alias' => $column->alias,
                 'currency_code' => $column->currency?->code,
                 'currency_symbol' => $column->currency?->symbol,
-                'current_price' => $current,
+                'current_price' => $feed->priceForInput($currentRaw),
+                'current_price_raw' => $currentRaw,
                 'pending_price' => $pendingChange?->new_price,
                 'others_pending' => $others,
             ];
@@ -266,7 +267,7 @@ class ProductController extends Controller
 
         $pending = [];
         foreach ($items as $item) {
-            $old = $product[$item['csv_column']] ?? null;
+            $old = $feed->parsePrice($product[$item['csv_column']] ?? null);
             $change = PendingPriceChange::query()->updateOrCreate(
                 [
                     'user_id' => $request->user()->id,
@@ -275,7 +276,7 @@ class ProductController extends Controller
                     'csv_column' => $item['csv_column'],
                 ],
                 [
-                    'old_price' => is_numeric($old) ? $old : null,
+                    'old_price' => $old,
                     'new_price' => $item['new_price'],
                 ],
             );

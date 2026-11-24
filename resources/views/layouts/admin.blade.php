@@ -35,17 +35,46 @@
         .shell { max-width: 1180px; margin: 0 auto; padding: 1.25rem; }
         header.appbar {
             display: flex; justify-content: space-between; align-items: center;
-            gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
-            border-bottom: 1px solid var(--border); padding-bottom: .9rem;
+            gap: 1rem 1.5rem; margin-bottom: 1.25rem; flex-wrap: wrap;
+            border-bottom: 1px solid var(--border); padding-bottom: 1rem;
         }
-        .brand { display: inline-flex; align-items: center; gap: .55rem; line-height: 1; }
-        .brand-mark { display: block; height: 26px; width: auto; object-fit: contain; }
-        .brand-name { font-weight: 800; letter-spacing: .02em; color: var(--brand-agri); }
-        .brand-name .brand-gator { color: var(--brand-gator); }
-        .brand-suffix { color: var(--accent); font-weight: 700; }
-        nav { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
-        nav a { color: var(--muted); font-weight: 600; }
+        .brand { display: inline-flex; align-items: center; gap: .65rem; line-height: 1; }
+        .brand-on-dark { align-items: center; gap: .95rem; }
+        .brand-plate {
+            display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(243, 244, 246, .88);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 9px; padding: .32rem .6rem .28rem;
+            backdrop-filter: blur(6px);
+        }
+        .brand-logo { display: block; height: 32px; width: auto; max-width: min(168px, 40vw); object-fit: contain; }
+        .brand-lockup { display: inline-flex; align-items: center; }
+        .brand-badge {
+            display: inline-flex; align-items: center; height: 1.5rem;
+            padding: 0 .6rem; border-radius: 999px;
+            background: rgba(56, 189, 248, .12); border: 1px solid rgba(56, 189, 248, .28);
+            color: #7dd3fc; font-size: .7rem; font-weight: 800;
+            letter-spacing: .07em; text-transform: uppercase;
+        }
+        .visually-hidden {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+        }
+        nav {
+            display: flex; gap: .65rem .85rem; flex-wrap: wrap; align-items: center;
+            flex: 1 1 280px; justify-content: flex-end; min-height: 2.35rem;
+        }
+        nav a {
+            color: var(--muted); font-weight: 600; line-height: 1;
+            display: inline-flex; align-items: center; min-height: 2.15rem;
+        }
         nav a:hover, nav a.active { color: #fff; }
+        nav form { display: contents; }
+        nav .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            height: 2.15rem; padding: 0 .85rem; margin: 0; line-height: 1;
+            vertical-align: middle;
+        }
         .card {
             background: var(--card); border: 1px solid var(--border);
             border-radius: 12px; padding: 1rem; margin-bottom: 1rem;
@@ -88,13 +117,15 @@
 <body>
 <div class="shell">
     <header class="appbar">
-        <x-brand compact suffix="admin" />
+        <x-brand tone="dark" suffix="Admin" />
         <nav>
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
             <a href="{{ route('admin.feeds.index') }}" class="{{ request()->routeIs('admin.feeds.*') ? 'active' : '' }}">Flux</a>
             <a href="{{ route('admin.price-columns.index') }}" class="{{ request()->routeIs('admin.price-columns.*') ? 'active' : '' }}">Mapping prix</a>
             <a href="{{ route('admin.product-sheet.index') }}" class="{{ request()->routeIs('admin.product-sheet.*') ? 'active' : '' }}">Mapping fiche</a>
+            <a href="{{ route('admin.product-sheet-groups.index') }}" class="{{ request()->routeIs('admin.product-sheet-groups.*') ? 'active' : '' }}">Zones fiche</a>
             <a href="{{ route('admin.currencies.index') }}" class="{{ request()->routeIs('admin.currencies.*') ? 'active' : '' }}">Devises</a>
+            <a href="{{ route('admin.languages.index') }}" class="{{ request()->routeIs('admin.languages.*') ? 'active' : '' }}">Langues</a>
             <a href="{{ route('admin.marketplaces.index') }}" class="{{ request()->routeIs('admin.marketplaces.*') ? 'active' : '' }}">Marketplaces</a>
             <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">Utilisateurs</a>
             <a href="{{ route('dashboard') }}">Suivi</a>

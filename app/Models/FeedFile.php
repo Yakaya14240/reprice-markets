@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\FeedSourceType;
+use App\Enums\PriceDecimalSeparator;
+use App\Support\PriceDecimalFormatter;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'write_location',
     'connection_config',
     'delimiter',
+    'price_decimal_separator',
     'sku_column',
     'name_column',
     'description_column',
@@ -31,10 +34,33 @@ class FeedFile extends Model
         return [
             'source_type' => FeedSourceType::class,
             'write_source_type' => FeedSourceType::class,
+            'price_decimal_separator' => PriceDecimalSeparator::class,
             'connection_config' => 'encrypted:array',
             'image_columns' => 'array',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function priceDecimalSeparator(): PriceDecimalSeparator
+    {
+        return $this->price_decimal_separator instanceof PriceDecimalSeparator
+            ? $this->price_decimal_separator
+            : PriceDecimalSeparator::Dot;
+    }
+
+    public function formatPrice(float|int|string $value, int $decimals = 2): string
+    {
+        return app(PriceDecimalFormatter::class)->format($value, $this->priceDecimalSeparator(), $decimals);
+    }
+
+    public function parsePrice(float|int|string|null $value): ?float
+    {
+        return app(PriceDecimalFormatter::class)->parse($value);
+    }
+
+    public function priceForInput(float|int|string|null $value, int $decimals = 2): ?string
+    {
+        return app(PriceDecimalFormatter::class)->forInput($value, $decimals);
     }
 
     public function priceColumns(): HasMany
@@ -55,6 +81,16 @@ class FeedFile extends Model
     public function pendingPriceChanges(): HasMany
     {
         return $this->hasMany(PendingPriceChange::class);
+    }
+
+    public function productSheetFields(): HasMany
+    {
+        return $this->hasMany(ProductSheetField::class);
+    }
+
+    public function pendingSheetChanges(): HasMany
+    {
+        return $this->hasMany(PendingSheetChange::class);
     }
 
     public function effectiveWriteSourceType(): FeedSourceType

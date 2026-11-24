@@ -6,15 +6,21 @@ use App\Exceptions\FeedPublishLockException;
 use App\Jobs\PublishPendingChangesJob;
 use App\Models\FeedFile;
 use App\Models\PendingPriceChange;
+use App\Models\PendingSheetChange;
 use App\Services\Publish\PendingConflictDetector;
+use App\Services\Publish\PendingSheetConflictDetector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 class PublishController extends Controller
 {
-    public function pending(Request $request, FeedFile $feed, PendingConflictDetector $conflictDetector): JsonResponse
-    {
+    public function pending(
+        Request $request,
+        FeedFile $feed,
+        PendingConflictDetector $conflictDetector,
+        PendingSheetConflictDetector $sheetConflictDetector,
+    ): JsonResponse {
         $columnLabels = $feed->priceColumns()
             ->get(['csv_column', 'name', 'alias'])
             ->mapWithKeys(function ($column) {
@@ -50,9 +56,28 @@ class PublishController extends Controller
             ->values()
             ->all();
 
+        $sheetItems = PendingSheetChange::query()
+            ->with('field:id,label')
+            ->where('user_id', $request->user()->id)
+            ->where('feed_file_id', $feed->id)
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(fn (PendingSheetChange $c) => [
+                'id' => $c->id,
+                'sku' => $c->sku,
+                'product_sheet_field_id' => $c->product_sheet_field_id,
+                'field_label' => $c->field?->label ?? ('Champ #'.$c->product_sheet_field_id),
+                'old_value' => $c->old_value,
+                'new_value' => $c->new_value,
+            ]);
+
+        $sheetOthers = $sheetConflictDetector->othersForFeed($request->user(), $feed);
+
         return response()->json([
             'pending' => $items,
             'others' => $others,
+            'pending_sheet' => $sheetItems,
+            'others_sheet' => $sheetOthers,
             'write_destination' => $feed->writeDestinationLabel(),
             'can_write' => $feed->hasWritableDestination(),
         ]);
@@ -66,8 +91,20 @@ class PublishController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function store(Request $request, FeedFile $feed, PendingConflictDetector $conflictDetector): JsonResponse
+    public function destroyPendingSheet(Request $request, FeedFile $feed, PendingSheetChange $pending): JsonResponse
     {
+        abort_unless($pending->user_id === $request->user()->id && $pending->feed_file_id === $feed->id, 403);
+        $pending->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function store(
+        Request $request,
+        FeedFile $feed,
+        PendingConflictDetector $conflictDetector,
+        PendingSheetConflictDetector $sheetConflictDetector,
+    ): JsonResponse {
         $data = $request->validate([
             'marketplace_ids' => ['nullable', 'array'],
             'marketplace_ids.*' => ['integer', 'exists:marketplaces,id'],
@@ -107,22 +144,29 @@ class PublishController extends Controller
             ], now()->addMinutes(10));
         }
 
-        $count = PendingPriceChange::query()
+        $priceCount = PendingPriceChange::query()
             ->where('user_id', $request->user()->id)
             ->where('feed_file_id', $feed->id)
             ->count();
 
-        if ($count === 0) {
+        $sheetCount = PendingSheetChange::query()
+            ->where('user_id', $request->user()->id)
+            ->where('feed_file_id', $feed->id)
+            ->count();
+
+        if ($priceCount === 0 && $sheetCount === 0) {
             return response()->json(['message' => 'Aucune modification en attente.'], 422);
         }
 
         if (! $confirmConflicts) {
             $conflicts = $conflictDetector->detect($request->user(), $feed);
-            if ($conflicts !== []) {
+            $sheetConflicts = $sheetConflictDetector->detect($request->user(), $feed);
+            if ($conflicts !== [] || $sheetConflicts !== []) {
                 return response()->json([
                     'code' => 'pending_conflicts',
                     'message' => 'Des modifications en attente d’autres opérateurs chevauchent votre panier.',
                     'conflicts' => $conflicts,
+                    'sheet_conflicts' => $sheetConflicts,
                 ], 409);
             }
         }

@@ -9,8 +9,10 @@ use App\Exceptions\FeedPublishLockException;
 use App\Models\FeedFile;
 use App\Models\Marketplace;
 use App\Models\PendingPriceChange;
+use App\Models\PendingSheetChange;
 use App\Models\PriceChangeLog;
 use App\Models\PricePushBatch;
+use App\Models\SheetChangeLog;
 use App\Models\User;
 use App\Services\Feed\FeedIO;
 use App\Services\Feed\FeedSnapshotService;
@@ -225,7 +227,13 @@ final class PublishPendingChangesService
                 ->where('feed_file_id', $feed->id)
                 ->get();
 
-            if ($pending->isEmpty()) {
+            $pendingSheet = PendingSheetChange::query()
+                ->with('field:id,csv_column,label')
+                ->where('user_id', $user->id)
+                ->where('feed_file_id', $feed->id)
+                ->get();
+
+            if ($pending->isEmpty() && $pendingSheet->isEmpty()) {
                 throw new RuntimeException('Aucune modification en attente.');
             }
 
@@ -250,7 +258,20 @@ final class PublishPendingChangesService
                     continue;
                 }
                 $idx = $bySku[$change->sku];
-                $products[$idx][$change->csv_column] = number_format((float) $change->new_price, 2, '.', '');
+                $products[$idx][$change->csv_column] = $feed->formatPrice($change->new_price);
+                $applied++;
+            }
+
+            foreach ($pendingSheet as $change) {
+                if (! isset($bySku[$change->sku])) {
+                    continue;
+                }
+                $csvColumn = $change->field?->csv_column;
+                if (! is_string($csvColumn) || $csvColumn === '') {
+                    continue;
+                }
+                $idx = $bySku[$change->sku];
+                $products[$idx][$csvColumn] = (string) ($change->new_value ?? '');
                 $applied++;
             }
 
@@ -260,19 +281,21 @@ final class PublishPendingChangesService
                 );
             }
 
-            $this->zeroPriceGuard->assertNoZeroPrices(
-                $pending->map(fn (PendingPriceChange $c) => new Offer(
-                    sku: $c->sku,
-                    price: (float) $c->new_price,
-                ))
-            );
+            if ($pending->isNotEmpty()) {
+                $this->zeroPriceGuard->assertNoZeroPrices(
+                    $pending->map(fn (PendingPriceChange $c) => new Offer(
+                        sku: $c->sku,
+                        price: (float) $c->new_price,
+                    ))
+                );
+            }
 
             $writeLabel = $feed->writeDestinationLabel();
             $this->updateProgress($user->id, 40, "Écriture du flux ({$writeLabel})…", $feed->id);
             $this->feedIO->write($feed, $headers, $products);
 
             $this->updateProgress($user->id, 50, 'Enregistrement de l’historique…', $feed->id);
-            DB::transaction(function () use ($pending, $user, $feed) {
+            DB::transaction(function () use ($pending, $pendingSheet, $user, $feed) {
                 foreach ($pending as $change) {
                     PriceChangeLog::query()->create([
                         'user_id' => $user->id,
@@ -283,7 +306,22 @@ final class PublishPendingChangesService
                         'new_price' => $change->new_price,
                     ]);
                 }
+                foreach ($pendingSheet as $change) {
+                    SheetChangeLog::query()->create([
+                        'user_id' => $user->id,
+                        'feed_file_id' => $feed->id,
+                        'sku' => $change->sku,
+                        'product_sheet_field_id' => $change->product_sheet_field_id,
+                        'csv_column' => $change->field?->csv_column ?? '',
+                        'old_value' => $change->old_value,
+                        'new_value' => $change->new_value,
+                    ]);
+                }
                 PendingPriceChange::query()
+                    ->where('user_id', $user->id)
+                    ->where('feed_file_id', $feed->id)
+                    ->delete();
+                PendingSheetChange::query()
                     ->where('user_id', $user->id)
                     ->where('feed_file_id', $feed->id)
                     ->delete();
@@ -301,13 +339,20 @@ final class PublishPendingChangesService
 
             $this->updateProgress($user->id, 60, 'Sync flux terminé', $feed->id);
 
+            $skuCount = $pending->pluck('sku')
+                ->merge($pendingSheet->pluck('sku'))
+                ->unique()
+                ->count();
+
             $batch->update([
-                'offers_count' => $pending->pluck('sku')->unique()->count(),
+                'offers_count' => $skuCount,
                 'result_message' => "Flux synchronisé vers {$writeLabel} ({$applied} modification(s)).",
                 'payload' => array_merge($batch->payload ?? [], [
                     'applied' => $applied,
                     'write_label' => $writeLabel,
                     'sync_ok' => true,
+                    'sheet_changes' => $pendingSheet->count(),
+                    'price_changes' => $pending->count(),
                 ]),
             ]);
 

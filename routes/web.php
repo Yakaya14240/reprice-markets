@@ -3,8 +3,11 @@
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\FeedController as AdminFeedController;
+use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\MarketplaceController;
 use App\Http\Controllers\Admin\PriceColumnController;
+use App\Http\Controllers\Admin\ProductSheetFieldController;
+use App\Http\Controllers\Admin\ProductSheetGroupController;
 use App\Http\Controllers\Admin\ProductSheetMappingController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
@@ -12,6 +15,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PriceController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PublishController;
+use App\Http\Controllers\SheetController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -31,6 +35,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('role:operator,admin')->group(function () {
         Route::get('/prices', [PriceController::class, 'index'])->name('prices.index');
+        Route::get('/fiches', [SheetController::class, 'index'])->name('sheets.index');
 
         Route::prefix('api/feeds/{feed}')->group(function () {
             Route::get('/status', [ProductController::class, 'status'])->name('api.feeds.status');
@@ -39,8 +44,11 @@ Route::middleware('auth')->group(function () {
             Route::get('/products/{row}', [ProductController::class, 'show'])->whereNumber('row')->name('api.products.show');
             Route::post('/products/{row}/prices', [ProductController::class, 'updatePrice'])->whereNumber('row')->name('api.products.prices');
             Route::post('/products/{row}/prices/batch', [ProductController::class, 'updatePrices'])->whereNumber('row')->name('api.products.prices.batch');
+            Route::get('/sheet/{row}', [SheetController::class, 'show'])->whereNumber('row')->name('api.sheets.show');
+            Route::post('/sheet/{row}/fields', [SheetController::class, 'updateFields'])->whereNumber('row')->name('api.sheets.fields');
             Route::get('/pending', [PublishController::class, 'pending'])->name('api.pending.index');
             Route::delete('/pending/{pending}', [PublishController::class, 'destroyPending'])->name('api.pending.destroy');
+            Route::delete('/pending-sheet/{pending}', [PublishController::class, 'destroyPendingSheet'])->name('api.pending.sheet.destroy');
             Route::post('/publish', [PublishController::class, 'store'])->name('api.publish.store');
         });
 
@@ -60,6 +68,8 @@ Route::middleware('auth')->group(function () {
         Route::post('feeds/{feed}/test', [AdminFeedController::class, 'test'])->name('feeds.test');
         Route::post('feeds/{feed}/test-write', [AdminFeedController::class, 'testWrite'])->name('feeds.test-write');
         Route::resource('currencies', CurrencyController::class)->except(['show']);
+        Route::resource('languages', LanguageController::class)->except(['show']);
+        Route::resource('product-sheet-groups', ProductSheetGroupController::class)->except(['show']);
         Route::get('price-columns', [PriceColumnController::class, 'index'])->name('price-columns.index');
         Route::post('price-columns', [PriceColumnController::class, 'store'])->name('price-columns.store');
         Route::put('price-columns/{priceColumn}', [PriceColumnController::class, 'update'])->name('price-columns.update');
@@ -67,5 +77,8 @@ Route::middleware('auth')->group(function () {
         Route::post('price-columns/{feed}/refresh-headers', [PriceColumnController::class, 'refreshHeaders'])->name('price-columns.refresh-headers');
         Route::get('product-sheet', [ProductSheetMappingController::class, 'index'])->name('product-sheet.index');
         Route::put('product-sheet/{feed}', [ProductSheetMappingController::class, 'update'])->name('product-sheet.update');
+        Route::post('product-sheet-fields', [ProductSheetFieldController::class, 'store'])->name('product-sheet-fields.store');
+        Route::put('product-sheet-fields/{productSheetField}', [ProductSheetFieldController::class, 'update'])->name('product-sheet-fields.update');
+        Route::delete('product-sheet-fields/{productSheetField}', [ProductSheetFieldController::class, 'destroy'])->name('product-sheet-fields.destroy');
     });
 });

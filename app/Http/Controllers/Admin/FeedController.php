@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\FeedSourceType;
+use App\Enums\PriceDecimalSeparator;
 use App\Http\Controllers\Controller;
 use App\Models\FeedFile;
 use App\Services\Feed\FeedIO;
@@ -26,6 +27,7 @@ class FeedController extends Controller
     {
         return view('admin.feeds.create', [
             'sourceTypes' => FeedSourceType::cases(),
+            'priceDecimalSeparators' => PriceDecimalSeparator::cases(),
         ]);
     }
 
@@ -50,6 +52,7 @@ class FeedController extends Controller
         return view('admin.feeds.edit', [
             'feed' => $feed,
             'sourceTypes' => FeedSourceType::cases(),
+            'priceDecimalSeparators' => PriceDecimalSeparator::cases(),
             'availableHeaders' => $feed->availableHeaders(),
         ]);
     }
@@ -124,6 +127,7 @@ class FeedController extends Controller
                 ),
             ],
             'delimiter' => ['required', 'string', 'max:8'],
+            'price_decimal_separator' => ['nullable', Rule::enum(PriceDecimalSeparator::class)],
             'sku_column' => ['required', 'string', 'max:255'],
             'name_column' => ['required', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
@@ -162,6 +166,7 @@ class FeedController extends Controller
             'write_source_type' => 'type d\'écriture',
             'write_location' => 'emplacement écriture',
             'delimiter' => 'délimiteur',
+            'price_decimal_separator' => 'séparateur décimal des prix',
             'sku_column' => 'colonne SKU',
             'name_column' => 'colonne nom produit',
             'sftp_host' => 'host SFTP',
@@ -223,6 +228,7 @@ class FeedController extends Controller
             'write_source_type' => $data['write_source_type'] ?? null,
             'write_location' => $writeLocation,
             'delimiter' => $data['delimiter'] === '\t' ? "\t" : $data['delimiter'],
+            'price_decimal_separator' => $data['price_decimal_separator'] ?? PriceDecimalSeparator::Dot->value,
             'sku_column' => $data['sku_column'],
             'name_column' => $data['name_column'],
             'is_active' => $request->boolean('is_active', true),

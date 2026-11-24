@@ -126,6 +126,7 @@
             <x-brand />
             <nav>
                 <a href="{{ route('prices.index') }}" class="{{ request()->routeIs('prices.*') ? 'active' : '' }}">Prix</a>
+                <a href="{{ route('sheets.index') }}" class="{{ request()->routeIs('sheets.*') ? 'active' : '' }}">Fiches</a>
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Suivi</a>
                 @if(auth()->user()->isAdmin())
                     <a href="{{ route('admin.dashboard') }}">Admin</a>

@@ -50,6 +50,18 @@
 <label>Délimiteur (`\t` pour tabulation)</label>
 <input name="delimiter" value="{{ old('delimiter', $f?->delimiter === "\t" ? '\t' : ($f?->delimiter ?? '\t')) }}" required>
 
+<label>Format décimal des prix (écriture flux)</label>
+@php($decimalSeparators = $priceDecimalSeparators ?? \App\Enums\PriceDecimalSeparator::cases())
+@php($currentDecimal = old('price_decimal_separator', $f?->price_decimal_separator?->value ?? \App\Enums\PriceDecimalSeparator::Dot->value))
+<select name="price_decimal_separator" required>
+    @foreach ($decimalSeparators as $separator)
+        <option value="{{ $separator->value }}" @selected($currentDecimal === $separator->value)>{{ $separator->label() }}</option>
+    @endforeach
+</select>
+<p class="muted" style="margin-top:-.45rem;margin-bottom:.9rem;">
+    À la publication, les prix sont écrits dans le CSV avec ce séparateur (ex. <code>12.50</code> ou <code>12,50</code>).
+</p>
+
 @php($headers = $availableHeaders ?? ($f?->availableHeaders() ?? []))
 <label>Colonne SKU</label>
 <x-csv-column-select

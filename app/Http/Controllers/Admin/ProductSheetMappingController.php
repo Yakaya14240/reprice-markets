@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\ProductSheetFieldType;
 use App\Http\Controllers\Controller;
 use App\Models\FeedFile;
+use App\Models\Language;
+use App\Models\ProductSheetField;
+use App\Models\ProductSheetGroup;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,11 +21,25 @@ class ProductSheetMappingController extends Controller
         $feedId = $request->integer('feed_file_id') ?: $feeds->first()?->id;
         $selectedFeed = $feeds->firstWhere('id', $feedId);
 
+        $fieldsQuery = ProductSheetField::query()
+            ->with(['language', 'group'])
+            ->when($feedId, fn ($q) => $q->where('feed_file_id', $feedId));
+
         return view('admin.product-sheet.index', [
             'feeds' => $feeds,
             'selectedFeedId' => $feedId,
             'selectedFeed' => $selectedFeed,
             'availableHeaders' => $selectedFeed?->availableHeaders() ?? [],
+            'languages' => Language::query()->active()->orderBy('sort_order')->orderBy('code')->get(),
+            'fieldTypes' => ProductSheetFieldType::cases(),
+            'sheetGroups' => ProductSheetGroup::query()->active()->orderBy('sort_order')->orderBy('name')->get(),
+            'fields' => $fieldsQuery
+                ->orderByRaw('case when product_sheet_group_id is null then 1 else 0 end')
+                ->orderBy('product_sheet_group_id')
+                ->orderBy('sort_order')
+                ->orderBy('label')
+                ->paginate(30)
+                ->withQueryString(),
         ]);
     }
 
